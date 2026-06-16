@@ -1,0 +1,128 @@
+/* ============================================================================
+   StarCast — FREEMIUM layer: trial banner, paywall, lock-screen push preview,
+   free-tier home, and locked-feature cards. Reuses the same tokens as
+   sc-app.css (--disp / --ui / --logo / --acc / --acc-soft / --sc-radius / --d*).
+============================================================================ */
+
+/* ---------------- trial countdown banner (premium home) ---------------- */
+.tb {
+  display: flex; align-items: center; gap: 11px;
+  margin: 12px 0 0; padding: 9px 10px 9px 14px;
+  border-radius: calc(15px * var(--sc-radius));
+  background: var(--acc-soft);
+  border: 1px solid var(--acc);
+  position: relative; z-index: 3;
+}
+.tb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--acc); flex: none; box-shadow: 0 0 8px var(--acc); animation: tbPulse 2.4s ease-in-out infinite; }
+@keyframes tbPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.tb-text { flex: 1; min-width: 0; font-size: 12.5px; color: rgba(255,255,255,0.82); line-height: 1.25; }
+.tb-text b { font-family: var(--disp); font-weight: 600; color: #fff; }
+.tb-cta { flex: none; font-family: var(--disp); font-size: 12px; font-weight: 600; color: #04130f; background: var(--acc); border: none; padding: 7px 13px; border-radius: 10px; cursor: pointer; transition: filter var(--d1), transform var(--d1); }
+.tb-cta:hover { filter: brightness(1.07); }
+.tb-cta:active { transform: scale(0.95); }
+
+/* ---------------- paywall ---------------- */
+.pw-hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 6px 4px 18px; }
+.pw-mark { display: grid; place-items: center; margin-bottom: 12px; }
+.pw-kicker { font-family: var(--disp); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--acc); }
+.pw-title { font-family: var(--logo); font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin: 8px 0 6px; }
+.pw-sub { font-size: 14px; line-height: 1.5; color: rgba(255,255,255,0.62); max-width: 270px; }
+
+.pw-features { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 14px; padding: 6px 2px 22px; }
+.pw-feat { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; line-height: 1.3; color: rgba(255,255,255,0.86); }
+.pw-feat-ic { width: 19px; height: 19px; border-radius: 50%; background: var(--acc-soft); border: 1px solid var(--acc); color: var(--acc); display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: none; margin-top: 1px; }
+
+.pw-plans { display: flex; flex-direction: column; gap: 10px; }
+.pw-plan { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; padding: 15px 16px; border-radius: calc(18px * var(--sc-radius)); border: 1.5px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #fff; cursor: pointer; position: relative; transition: border-color var(--d1), background var(--d1), transform var(--d1); }
+.pw-plan:active { transform: scale(0.99); }
+.pw-plan.on { border-color: var(--acc); background: var(--acc-soft); }
+.pw-radio { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.3); flex: none; display: grid; place-items: center; transition: all var(--d1); }
+.pw-plan.on .pw-radio { border-color: var(--acc); background: var(--acc); color: #04130f; font-size: 12px; font-weight: 700; }
+.pw-plan-main { flex: 1; min-width: 0; }
+.pw-plan-name { font-family: var(--disp); font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.pw-plan-note { font-size: 12px; color: rgba(255,255,255,0.58); margin-top: 2px; }
+.pw-plan-price { text-align: right; flex: none; }
+.pw-plan-amt { font-family: var(--disp); font-size: 17px; font-weight: 600; }
+.pw-plan-per { font-size: 11px; color: rgba(255,255,255,0.55); }
+.pw-badge { font-family: var(--disp); font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #04130f; background: var(--acc); padding: 3px 8px; border-radius: 8px; }
+.pw-save { font-family: var(--disp); font-size: 10px; font-weight: 600; color: var(--acc); }
+
+.pw-cta { width: 100%; margin-top: 18px; border: none; border-radius: calc(16px * var(--sc-radius)); padding: 16px 0; font-family: var(--disp); font-size: 16px; font-weight: 600; color: #04130f; background: var(--acc); cursor: pointer; transition: filter var(--d1), transform var(--d1); }
+.pw-cta:hover { filter: brightness(1.06); }
+.pw-cta:active { transform: scale(0.985); }
+.pw-cta-note { text-align: center; font-size: 11.5px; color: rgba(255,255,255,0.5); margin: 11px 0 0; line-height: 1.5; }
+.pw-restore { display: block; width: 100%; text-align: center; background: none; border: none; color: var(--acc); font-family: var(--ui); font-size: 13.5px; font-weight: 500; cursor: pointer; margin: 16px 0 4px; }
+.pw-legal { text-align: center; font-size: 10.5px; color: rgba(255,255,255,0.34); line-height: 1.6; margin: 6px 0 0; }
+.pw-success { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 90px 26px 0; }
+.pw-success-mark { width: 76px; height: 76px; border-radius: 50%; background: var(--acc-soft); border: 1.5px solid var(--acc); color: var(--acc); display: grid; place-items: center; font-size: 38px; margin-bottom: 22px; }
+.pw-success-title { font-family: var(--disp); font-size: 24px; font-weight: 600; }
+.pw-success-body { font-size: 14px; line-height: 1.6; color: rgba(255,255,255,0.65); max-width: 280px; margin: 10px 0 26px; }
+
+/* ---------------- lock-screen push preview ---------------- */
+.ls { position: absolute; inset: 0; z-index: 70; border-radius: 42px; overflow: hidden; display: flex; flex-direction: column; align-items: center; color: #fff; cursor: pointer; }
+.ls-wall { position: absolute; inset: 0; z-index: 0; }
+.ls-scrim { position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, rgba(3,5,12,0.35) 0%, rgba(3,5,12,0.05) 30%, rgba(3,5,12,0.45) 100%); }
+.ls-top { position: relative; z-index: 3; margin-top: 78px; display: flex; flex-direction: column; align-items: center; }
+.ls-lock { font-size: 16px; opacity: 0.85; margin-bottom: 14px; }
+.ls-date { font-family: var(--disp); font-size: 16px; font-weight: 500; letter-spacing: 0.01em; opacity: 0.9; }
+.ls-clock { font-family: var(--disp); font-size: 80px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; margin-top: 2px; text-shadow: 0 2px 20px rgba(0,0,0,0.3); }
+.ls-notes { position: relative; z-index: 3; margin-top: auto; width: 100%; padding: 0 12px 18px; display: flex; flex-direction: column; gap: 9px; }
+.ls-note { display: flex; gap: 11px; padding: 13px 14px; border-radius: 19px; background: rgba(28,32,42,0.62); backdrop-filter: blur(26px); -webkit-backdrop-filter: blur(26px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 30px rgba(0,0,0,0.35); }
+.ls-note-icon { width: 38px; height: 38px; border-radius: 9px; flex: none; display: grid; place-items: center; background: linear-gradient(165deg, #0e2535, #081019); border: 1px solid rgba(255,255,255,0.12); }
+.ls-note-body { flex: 1; min-width: 0; }
+.ls-note-head { display: flex; align-items: center; gap: 6px; }
+.ls-note-app { font-family: var(--disp); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(255,255,255,0.7); }
+.ls-note-time { margin-left: auto; font-size: 11px; color: rgba(255,255,255,0.5); }
+.ls-note-title { font-family: var(--disp); font-size: 14.5px; font-weight: 600; margin-top: 3px; line-height: 1.25; }
+.ls-note-title .go { color: var(--acc); }
+.ls-note-text { font-size: 13px; line-height: 1.4; color: rgba(255,255,255,0.82); margin-top: 2px; }
+.ls-hint { position: relative; z-index: 3; font-size: 11px; color: rgba(255,255,255,0.5); padding-bottom: 16px; }
+
+/* ---------------- free-tier home ---------------- */
+.fh-loc { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 4px; }
+.fh-loc-name { display: inline-flex; align-items: center; gap: 7px; font-family: var(--disp); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+.fh-lock-glyph { font-size: 12px; opacity: 0.55; }
+.fh-loc-region { font-size: 12px; color: rgba(255,255,255,0.55); letter-spacing: 0.02em; }
+.fh-loc-add { background: none; border: none; color: var(--acc); font-size: 12px; font-weight: 500; font-family: var(--ui); cursor: pointer; margin-top: 5px; padding: 4px 8px; }
+
+.fh-locks { display: flex; flex-direction: column; gap: 11px; padding: 18px 18px 0; position: relative; z-index: 3; }
+.lock-card { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; padding: 15px 16px; border-radius: calc(18px * var(--sc-radius)); border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.045); color: #fff; cursor: pointer; position: relative; overflow: hidden; transition: background var(--d1), transform var(--d1); }
+.lock-card:hover { background: rgba(255,255,255,0.075); }
+.lock-card:active { transform: scale(0.985); }
+.lock-card-ic { width: 40px; height: 40px; border-radius: 12px; flex: none; display: grid; place-items: center; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); font-size: 17px; }
+.lock-card-main { flex: 1; min-width: 0; }
+.lock-card-title { font-family: var(--disp); font-size: 15.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.lock-card-sub { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 2px; line-height: 1.35; }
+.lock-card-chev2 { font-size: 18px; color: rgba(255,255,255,0.4); flex: none; }
+.lock-pill { font-family: var(--disp); font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--acc); border: 1px solid var(--acc); border-radius: 7px; padding: 2px 6px; }
+
+/* the alert / primary upsell card */
+.lock-card.accent { background: var(--acc-soft); border-color: var(--acc); }
+.lock-card.accent .lock-card-ic { background: rgba(0,0,0,0.18); border-color: rgba(255,255,255,0.16); color: var(--acc); }
+.lock-card-cta { flex: none; font-family: var(--disp); font-size: 12.5px; font-weight: 600; color: #04130f; background: var(--acc); border: none; padding: 9px 14px; border-radius: 11px; cursor: pointer; }
+
+/* settings: premium status + upgrade */
+.set-upgrade { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; margin-top: 8px; padding: 16px; border-radius: calc(18px * var(--sc-radius)); border: 1px solid var(--acc); background: var(--acc-soft); color: #fff; cursor: pointer; transition: transform var(--d1); }
+.set-upgrade:active { transform: scale(0.99); }
+.set-upgrade-ic { width: 44px; height: 44px; border-radius: 13px; flex: none; display: grid; place-items: center; background: conic-gradient(from 200deg, #7ef0d2, #8fd0ff, #c9a8ff, #ffce8f, #7ef0d2); }
+.set-upgrade-main { flex: 1; min-width: 0; }
+.set-upgrade-title { font-family: var(--disp); font-size: 16px; font-weight: 600; }
+.set-upgrade-sub { font-size: 12.5px; color: rgba(255,255,255,0.72); margin-top: 2px; }
+.set-upgrade-cta { flex: none; font-family: var(--disp); font-size: 12.5px; font-weight: 600; color: #04130f; background: var(--acc); border-radius: 11px; padding: 9px 14px; }
+.set-prem { display: flex; align-items: center; gap: 13px; margin-top: 8px; padding: 16px; border-radius: calc(18px * var(--sc-radius)); border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); }
+.set-prem-ic { width: 44px; height: 44px; border-radius: 13px; flex: none; display: grid; place-items: center; background: conic-gradient(from 200deg, #7ef0d2, #8fd0ff, #c9a8ff, #ffce8f, #7ef0d2); }
+.set-prem-main { flex: 1; }
+.set-prem-title { font-family: var(--disp); font-size: 16px; font-weight: 600; }
+.set-prem-sub { font-size: 12.5px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+.set-prem-check { color: var(--acc); font-size: 18px; }
+
+/* locked alerts card in settings (free tier) */
+.set-locked { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.set-locked-main { flex: 1; }
+.set-locked-name { font-size: 14.5px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.set-locked-sub { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+.set-locked-cta { flex: none; font-family: var(--disp); font-size: 12.5px; font-weight: 600; color: #04130f; background: var(--acc); border: none; border-radius: 11px; padding: 9px 13px; cursor: pointer; }
+
+/* mini blurred week preview inside the free "7-night" lock card */
+.lock-week { display: flex; gap: 4px; align-items: flex-end; height: 30px; width: 64px; flex: none; filter: blur(1.4px); opacity: 0.85; }
+.lock-week span { flex: 1; border-radius: 2px 2px 0 0; background: var(--acc); }

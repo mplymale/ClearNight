@@ -2,12 +2,16 @@
   "expo": {
     "name": "StarCast",
     "slug": "StarCast",
+    "scheme": "starcast",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "StarCast uses your location to show local dark-sky conditions and nearby stargazing spots."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +24,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-splash-screen",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "StarCast uses your location to show local dark-sky conditions and nearby stargazing spots."
+        }
+      ]
+    ]
   }
 }

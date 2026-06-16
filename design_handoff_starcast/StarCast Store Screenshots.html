@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StarCast — Store Screenshots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0a0b0e; -webkit-font-smoothing: antialiased; }
+  .page-note { color: #6f7785; font-family: "Space Grotesk", sans-serif; font-size: 13px;
+    padding: 30px 40px 0; line-height: 1.6; max-width: 900px; }
+  .page-note code { background: #14161c; border: 1px solid #23262e; border-radius: 5px;
+    padding: 1px 6px; font-size: 12px; color: #b7c0cc; }
+  /* App Store screenshot canvas: 6.7" iPhone = 1290×2796. We scale to fit. */
+  .strip { display: flex; gap: 28px; padding: 40px; overflow-x: auto; align-items: flex-start; }
+  .shot {
+    width: 323px; height: 699px;   /* 1290×2796 ÷ 4 */
+    border-radius: 26px; overflow: hidden; flex: none; position: relative;
+    display: flex; flex-direction: column; align-items: center;
+    font-family: "Sora", sans-serif;
+  }
+  .shot .headline { z-index: 4; text-align: center; padding: 30px 26px 0; }
+  .shot .headline h2 { margin: 0; font-size: 23px; line-height: 1.15; font-weight: 600;
+    letter-spacing: -0.02em; color: #fff; }
+  .shot .headline p { margin: 9px 0 0; font-size: 13px; line-height: 1.45; font-weight: 500;
+    color: rgba(255,255,255,0.66); font-family: "Space Grotesk", sans-serif; }
+  /* phone */
+  .phone { position: relative; margin-top: 26px; width: 234px; height: 478px;
+    border-radius: 38px; background: #05070c; padding: 7px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+    flex: none; }
+  .phone .screen { width: 100%; height: 100%; border-radius: 32px; overflow: hidden;
+    position: relative; }
+  iframe { border: 0; width: 390px; height: 800px;
+    transform: scale(0.5641); transform-origin: top left; }
+  .notch { position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    width: 78px; height: 19px; background: #05070c; border-radius: 0 0 13px 13px; z-index: 3; }
+</style>
+</head>
+<body>
+  <p class="page-note">App Store screenshot set — 6.7" iPhone canvas (<code>1290×2796</code>), shown at
+    ¼ scale. Each frame embeds a live screen from the prototype via the Tweaks deep-link, with a
+    marketing headline above. Screenshot each <code>.shot</code> at high quality, or ask me to render
+    the PNG set. You need 3–10 per locale; these are the first five in recommended order.</p>
+
+  <div class="strip" id="strip"></div>
+
+  <script>
+    // Each shot: gradient bg + headline + a prototype screen loaded with preset tweaks.
+    const BASE = "../StarCast Interactive.html";
+    const SHOTS = [
+      { bg: "linear-gradient(165deg,#04060e,#0a2230)",
+        h: "Is tonight a GO?", s: "One glance tells you if the sky is worth it.",
+        tweaks: { tier: "premium", start: "home" } },
+      { bg: "linear-gradient(165deg,#05060f,#122039)",
+        h: "Plan the whole week", s: "See every clear night up to 7 days out.",
+        tweaks: { tier: "premium", start: "home" } },
+      { bg: "linear-gradient(165deg,#06121f,#0a2230)",
+        h: "Never miss a clear night", s: "Get a push the moment your sky opens up.",
+        tweaks: { tier: "premium", lockPreview: "tonight" } },
+      { bg: "linear-gradient(165deg,#0a1a2e,#0a2230)",
+        h: "Look ahead", s: "A heads-up when a GO window is coming.",
+        tweaks: { tier: "premium", lockPreview: "window" } },
+      { bg: "linear-gradient(165deg,#04130f,#0a2230)",
+        h: "Start free, go Premium", s: "7 days on us. Then $12.99/yr or $29.99 once.",
+        tweaks: { tier: "trial", start: "home" } },
+    ];
+
+    function build(){
+      const strip = document.getElementById("strip");
+      SHOTS.forEach((shot, i) => {
+        const card = document.createElement("div");
+        card.className = "shot";
+        card.style.background = shot.bg;
+        const q = encodeURIComponent(JSON.stringify(shot.tweaks));
+        card.innerHTML =
+          '<div class="headline"><h2>'+shot.h+'</h2><p>'+shot.s+'</p></div>'+
+          '<div class="phone"><div class="notch"></div><div class="screen">'+
+          '<iframe src="'+BASE+'#tweaks='+q+'" loading="lazy"></iframe>'+
+          '</div></div>';
+        strip.appendChild(card);
+      });
+    }
+    build();
+  </script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StarCast — App Icon Generator</title>
+<style>
+  :root { --mint:#7ef0d2; --ink:#e7eaef; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #0a0b0e; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 80px; }
+  h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .sub { color: #8b929c; font-size: 14.5px; line-height: 1.55; margin: 0 0 32px; max-width: 620px; }
+  .hero { display: flex; gap: 36px; align-items: center; flex-wrap: wrap; margin-bottom: 40px; }
+  .hero-icon { width: 200px; height: 200px; border-radius: 45px; overflow: hidden;
+    box-shadow: 0 30px 70px -28px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07); flex: none; }
+  .hero-meta { font-size: 14px; line-height: 1.7; color: #b6bcc6; }
+  .hero-meta b { color: var(--ink); font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; border: none;
+    border-radius: 11px; padding: 11px 18px; transition: filter .15s, transform .1s; }
+  button:active { transform: scale(.98); }
+  .btn-primary { background: var(--mint); color: #04130f; }
+  .btn-primary:hover { filter: brightness(1.06); }
+  .btn-ghost { background: rgba(255,255,255,0.07); color: var(--ink); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+  .sizes { border-top: 1px solid rgba(255,255,255,0.09); padding-top: 30px; }
+  .sizes h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.14em; color: #7b828c; font-weight: 600; margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 22px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cell .tile { border-radius: 22%; overflow: hidden; box-shadow: 0 10px 24px -12px rgba(0,0,0,0.7); }
+  .cell .label { font-size: 11.5px; color: #8b929c; text-align: center; line-height: 1.4; }
+  .cell .label b { color: var(--ink); font-weight: 600; }
+  .cell button { font-size: 12px; padding: 7px 12px; }
+  .note { margin-top: 36px; font-size: 13px; line-height: 1.65; color: #8b929c;
+    background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px; padding: 18px 20px; }
+  .note b { color: var(--ink); }
+  canvas { display: none; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>StarCast — App Icon</h1>
+    <p class="sub">Your final logomark (the forecast line through the star field) on the dark squircle tile.
+      Export the master 1024&times;1024 for App Store Connect, or grab any individual size. Icons are exported as
+      flat PNGs with no transparency — exactly what Apple and Google require.</p>
+
+    <div class="hero">
+      <div class="hero-icon" id="heroIcon"></div>
+      <div class="hero-meta">
+        <div><b>Mark:</b> Forecast line · "M"</div>
+        <div><b>Tile:</b> radial <code>#103040 → #06121b</code></div>
+        <div><b>Accent:</b> mint <code>#7ef0d2</code></div>
+        <div class="row">
+          <button class="btn-primary" onclick="downloadOne(1024)">Download master · 1024px</button>
+          <button class="btn-ghost" onclick="downloadAll()">Download all sizes (.zip-less)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sizes">
+      <h2>All required sizes</h2>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="note">
+      <b>How to use:</b> In Expo, the simplest path is to drop the <b>1024&times;1024</b> master in as your
+      <code>icon</code> in <code>app.json</code> — Expo/EAS generates every smaller size and the rounded mask
+      automatically, so you usually only need the master. The individual sizes here are provided in case a tool
+      asks for them directly. <b>Do not</b> round the corners yourself or add transparency — the OS masks the
+      corners for you.
+    </div>
+  </div>
+
+  <canvas id="cv"></canvas>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="sc-logo-forecast.jsx"></script>
+
+<script type="text/babel">
+  /* ---- Build the full icon as a standalone SVG string (tile + mark), so we can rasterize it ---- */
+  function iconSVG() {
+    // mark geometry, lifted verbatim from MarkForecastField (viewBox 0 0 120 120)
+    const field = FIELD.map(f => f.s
+      ? sparkle(f.x, f.y, f.r + 0.6, f.c, f.o)
+      : `<circle cx="${f.x}" cy="${f.y}" r="${f.r}" fill="${f.c}" opacity="${f.o}"/>`).join("");
+    const P = [{x:16,y:80},{x:34,y:70},{x:54,y:58},{x:70,y:50},{x:90,y:45},{x:106,y:43}];
+    const now = 3;
+    const past = smooth(P.slice(0, now + 1));
+    const future = smooth(P.slice(now));
+    const nodes = P.map((p, i) => i === now ? "" :
+      `<circle cx="${p.x}" cy="${p.y}" r="${i > now ? 2.7 : 2.2}" fill="${i > now ? "#7ef0d2" : "rgba(126,240,210,0.55)"}"/>`).join("");
+    const g = "126,240,210", n = P[now];
+    const glowStar =
+      `<circle cx="${n.x}" cy="${n.y}" r="${5.4*3}" fill="rgba(${g},0.16)"/>` +
+      `<circle cx="${n.x}" cy="${n.y}" r="${5.4*2}" fill="rgba(${g},0.26)"/>` +
+      `<circle cx="${n.x}" cy="${n.y}" r="${5.4*1.3}" fill="rgba(${g},0.45)"/>` +
+      sparkle(n.x, n.y, 5.4, "#f3f6f8", 1);
+    // Render mark inside the 1024 tile: the 120-viewBox mark, scaled ~0.62 and centered.
+    const s = 0.62, off = (120 - 120 * s) / 2; // center the scaled group
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 120 120">
+      <defs>
+        <radialGradient id="tile" cx="50%" cy="30%" r="100%">
+          <stop offset="0%" stop-color="#103040"/>
+          <stop offset="55%" stop-color="#0a1f2c"/>
+          <stop offset="100%" stop-color="#06121b"/>
+        </radialGradient>
+      </defs>
+      <rect width="120" height="120" fill="url(#tile)"/>
+      <g transform="translate(${off} ${off}) scale(${s})">
+        ${field}
+        <path d="${past}" fill="none" stroke="rgba(126,240,210,0.42)" stroke-width="2" stroke-dasharray="0.5 4.5" stroke-linecap="round"/>
+        <path d="${future}" fill="none" stroke="rgba(126,240,210,0.18)" stroke-width="6.5" stroke-linecap="round"/>
+        <path d="${future}" fill="none" stroke="#7ef0d2" stroke-width="2.4" stroke-linecap="round"/>
+        ${nodes}
+        ${glowStar}
+      </g>
+    </svg>`;
+  }
+  function sparkle(x, y, r, fill, o) {
+    const i = r * 0.34;
+    const pts = [[x,y-r],[x+i,y-i],[x+r,y],[x+i,y+i],[x,y+r],[x-i,y+i],[x-r,y],[x-i,y-i]].map(q=>q.join(",")).join(" ");
+    return `<polygon points="${pts}" fill="${fill}" opacity="${o}"/>`;
+  }
+
+  const SVG = iconSVG();
+
+  // live hero preview (rounded by CSS)
+  document.getElementById("heroIcon").innerHTML =
+    SVG.replace('width="1024" height="1024"', 'width="200" height="200"');
+
+  function rasterize(px) {
+    return new Promise((resolve) => {
+      const cv = document.getElementById("cv");
+      cv.width = px; cv.height = px;
+      const ctx = cv.getContext("2d");
+      const img = new Image();
+      const blob = new Blob([SVG], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      img.onload = () => {
+        ctx.clearRect(0, 0, px, px);
+        ctx.drawImage(img, 0, 0, px, px);
+        URL.revokeObjectURL(url);
+        cv.toBlob(resolve, "image/png");
+      };
+      img.src = url;
+    });
+  }
+  async function downloadOne(px) {
+    const blob = await rasterize(px);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `StarCast-icon-${px}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  async function downloadAll() {
+    for (const s of SIZES) { await downloadOne(s.px); await new Promise(r => setTimeout(r, 280)); }
+  }
+  window.downloadOne = downloadOne; window.downloadAll = downloadAll;
+
+  const SIZES = [
+    { px: 1024, label: "App Store master" },
+    { px: 180,  label: "iPhone @3x" },
+    { px: 167,  label: "iPad Pro" },
+    { px: 152,  label: "iPad @2x" },
+    { px: 120,  label: "iPhone @2x" },
+    { px: 512,  label: "Play Store" },
+    { px: 192,  label: "Android xxxhdpi" },
+    { px: 144,  label: "Android xxhdpi" },
+    { px: 96,   label: "Android xhdpi" },
+  ];
+  const grid = document.getElementById("grid");
+  SIZES.forEach(s => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    const disp = Math.min(120, s.px);
+    cell.innerHTML =
+      `<div class="tile" style="width:${disp}px;height:${disp}px">${SVG.replace('width="1024" height="1024"', `width="${disp}" height="${disp}"`)}</div>` +
+      `<div class="label"><b>${s.px}px</b><br>${s.label}</div>` +
+      `<button class="btn-ghost" data-px="${s.px}">Download</button>`;
+    cell.querySelector("button").onclick = () => downloadOne(s.px);
+    grid.appendChild(cell);
+  });
+</script>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#081722"/><g transform="translate(14 60)"><path d="M2 18 C 14 14 26 8 40 4 C 54 1 64 0 72 0" fill="none" stroke="#7ef0d2" stroke-width="3" stroke-linecap="round"/><circle cx="40" cy="4" r="6" fill="#fff"/></g></svg>
+</template>
+</body>
+</html>
