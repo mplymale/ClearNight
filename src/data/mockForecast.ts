@@ -41,6 +41,9 @@ export interface SkyObject {
   dirLabel: string;
   dirDeg: number;
   altCurve: AltPoint[];
+  // Which onboarding interest this object matches, for auto-favoriting.
+  // Optional since hand-authored mock objects don't set it.
+  category?: 'deep' | 'planets' | 'meteors';
 }
 
 export interface PrimeTarget {

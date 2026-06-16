@@ -42,7 +42,6 @@ export function FactorChips({ day, locIndex, dayIndex }: Props) {
             <Text style={styles.chipUnit}>{it.unit}</Text>
           </Text>
           <Text style={styles.chipLabel}>{it.label}</Text>
-          <Text style={styles.chipMore}>›</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -85,12 +84,5 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: 'rgba(255,255,255,0.6)',
-  },
-  chipMore: {
-    position: 'absolute',
-    top: 7,
-    right: 9,
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
   },
 });

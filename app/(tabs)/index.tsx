@@ -24,11 +24,10 @@ import { DayStrip } from '../../src/components/home/DayStrip';
 import { FactorChips } from '../../src/components/home/FactorChips';
 import { LockedCards } from '../../src/components/home/LockedCards';
 import { NightArc } from '../../src/components/home/NightArc';
-import { PrimeTargetCard } from '../../src/components/home/PrimeTargetCard';
+import { FeaturedTargets } from '../../src/components/home/PrimeTargetCard';
 import { SkyBackground } from '../../src/components/home/SkyBackground';
 import { StarField } from '../../src/components/home/StarField';
-
-type Tier = 'free' | 'premium';
+import { useSubscription, SubscriptionStatus } from '../../src/context/SubscriptionContext';
 
 // ── Shared icons ─────────────────────────────────────────────────────────────
 
@@ -210,13 +209,15 @@ function TopSection(p: TopSectionProps) {
 }
 
 // ── Dev tier toggle (remove before shipping) ─────────────────────────────────
+// Cycles the *real* persisted subscription status (not a fake local-only
+// value) so testing free/trial/subscribed states actually matches what
+// the rest of the app (trial banner, paywall) will see.
 
-function TierToggle({ tier, onToggle }: { tier: Tier; onToggle: () => void }) {
+function TierToggle({ status, onCycle }: { status: SubscriptionStatus; onCycle: () => void }) {
+  const label = status === 'subscribed' ? '★' : status === 'trial' ? '◐' : '○';
   return (
-    <TouchableOpacity style={styles.devToggle} onPress={onToggle} activeOpacity={0.7}>
-      <Text style={styles.devToggleText}>
-        {tier === 'premium' ? '★' : '○'}
-      </Text>
+    <TouchableOpacity style={styles.devToggle} onPress={onCycle} activeOpacity={0.7}>
+      <Text style={styles.devToggleText}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -226,7 +227,7 @@ function TierToggle({ tier, onToggle }: { tier: Tier; onToggle: () => void }) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { nightVision } = useNightVision();
-  const [tier, setTier] = useState<Tier>('premium');
+  const { status, setStatus } = useSubscription();
   const { plan } = usePlan();
   const { locations, activeLocIndex } = useLocations();
   const [locIndex, setLocIndex] = useState(0);
@@ -237,12 +238,12 @@ export default function HomeScreen() {
     setDayIndex(0);
   }, [activeLocIndex]);
 
-  const isFree = tier === 'free';
+  const isFree = status === 'free';
 
-  const safeLocIndex = Math.min(locIndex, locations.length - 1);
-  const loc = isFree ? locations[0] : locations[safeLocIndex];
-  const day = isFree ? loc.days[0] : loc.days[dayIndex];
-  const verdict = VERDICTS[day.verdict];
+  const safeLocIndex = Math.min(locIndex, Math.max(0, locations.length - 1));
+  const loc = locations.length > 0 ? (isFree ? locations[0] : locations[safeLocIndex]) : null;
+  const day = loc ? (isFree ? loc.days[0] : loc.days[dayIndex]) : null;
+  const verdict = day ? VERDICTS[day.verdict] : VERDICTS.poor;
 
   // Use refs so PanResponder callbacks always see current values
   const locIndexRef = useRef(locIndex);
@@ -299,6 +300,24 @@ export default function HomeScreen() {
     })
   ).current;
 
+  // No spots saved (e.g. the user removed their last one) — prompt to add
+  // one rather than crashing on undefined location/day data below.
+  if (!loc || !day) {
+    return (
+      <View style={[styles.container, styles.emptyState, { paddingTop: insets.top }]}>
+        <Text style={styles.emptyStateTitle}>No spots yet</Text>
+        <Text style={styles.emptyStateBody}>Add a place to see tonight's forecast.</Text>
+        <TouchableOpacity
+          style={styles.emptyStateBtn}
+          activeOpacity={0.85}
+          onPress={() => router.push('/add-location')}
+        >
+          <Text style={styles.emptyStateBtnText}>+ Add a spot</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const weekScores = loc.days.map((d) => d.score);
 
   return (
@@ -332,7 +351,10 @@ export default function HomeScreen() {
 
         {/* Dev tier toggle — tiny absolute badge, remove before shipping */}
         <View style={styles.devToggleWrap}>
-          <TierToggle tier={tier} onToggle={() => setTier(t => t === 'premium' ? 'free' : 'premium')} />
+          <TierToggle
+            status={status}
+            onCycle={() => setStatus(status === 'free' ? 'trial' : status === 'trial' ? 'subscribed' : 'free')}
+          />
         </View>
 
 
@@ -343,8 +365,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Trial banner (premium trial tier only — hide when fully subscribed) */}
-        {!isFree && (
+        {/* Trial banner — only while actually on trial, not once subscribed */}
+        {status === 'trial' && (
           <View style={styles.trialBanner}>
             <View style={[styles.trialDot, { backgroundColor: verdict.accent }]} />
             <Text style={styles.trialText}>
@@ -364,26 +386,28 @@ export default function HomeScreen() {
         >
           <NightArc loc={loc} day={day} verdict={verdict} freeMode={isFree} />
 
-          {/* ── PREMIUM: factor chips + prime target ── */}
+            {/* Factor chips — premium only (day-by-day breakdown) */}
           {!isFree && (
-            <>
-              <FactorChips day={day} locIndex={locIndex} dayIndex={dayIndex} />
-              <PrimeTargetCard loc={loc} day={day} verdict={verdict} locIndex={locIndex} />
-            </>
+            <FactorChips day={day} locIndex={locIndex} dayIndex={dayIndex} />
           )}
+
+          {/* Prime target card — always visible, even on free */}
+          <FeaturedTargets loc={loc} day={day} verdict={verdict} locIndex={locIndex} freeMode={isFree} />
         </Animated.View>
 
-        {/* ── FREE: locked cards ── */}
+        {/* ── FREE: locked upsell cards (week ahead + alerts) ── */}
         {isFree && (
           <LockedCards
             verdict={verdict}
             weekScores={weekScores}
-            onUpgrade={() => {}}
+            onUpgrade={() => router.push('/paywall')}
           />
         )}
 
-        {/* Bottom sheet spacer so content isn't hidden behind the sheet */}
-        <View style={{ height: 80 }} />
+        {/* Bottom sheet spacer so content isn't hidden behind the sheet —
+            taller than the sheet's peek height (88) to leave clear room
+            below content like the empty-state notes in FeaturedTargets. */}
+        <View style={{ height: 140 }} />
       </ScrollView>
 
       {/* Hour-by-hour bottom sheet */}
@@ -398,6 +422,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#04060e',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 8,
+  },
+  emptyStateTitle: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  emptyStateBody: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyStateBtn: {
+    borderRadius: 999,
+    backgroundColor: '#7ef0d2',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  emptyStateBtnText: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#04130f',
   },
   scroll: {
     flex: 1,

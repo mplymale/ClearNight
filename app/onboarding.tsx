@@ -17,7 +17,15 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import * as Location from 'expo-location';
 import { StarField } from '../src/components/home/StarField';
 import { useLocations } from '../src/context/LocationsContext';
+import { useFavorites } from '../src/context/FavoritesContext';
+import { useInterests } from '../src/context/InterestsContext';
 import { mkLocFromPlace } from '../src/data/mockForecast';
+import { DARK_SKY_PLACES } from '../src/data/darkSkyPlaces';
+import { haversineMiles, formatMiles } from '../src/services/geo';
+import { estimateBortle } from '../src/services/bortleEstimate';
+import { getNightBounds } from '../src/services/moon';
+import { computeTonightsSky } from '../src/services/skyObjects';
+import { CheckIcon } from '../src/components/common/CheckIcon';
 
 const ACCENT = '#7ef0d2';
 const ACCENT_SOFT = 'rgba(126,240,210,0.14)';
@@ -197,8 +205,8 @@ function SearchIcon() {
 
 function LocationArrow() {
   return (
-    <Svg width={16} height={16} viewBox="0 0 16 16" fill="none">
-      <Path d="M8 2 L14 8 L8 14 M14 8 L2 8" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 11.5L21 3L12.5 21L10.5 13.5L3 11.5Z" fill="#04130f" />
     </Svg>
   );
 }
@@ -261,7 +269,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
           </FadeInUp>
           <FadeInUp delay={1000}>
             <Text style={styles.obBody}>
-              A clear read on tonight's sky — clouds, moon, seeing and darkness — for the spots you actually go.
+              Know before you go. Get a complete forecast for stargazing and astrophotography in a single view.
             </Text>
           </FadeInUp>
         </View>
@@ -280,10 +288,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
 
 // ── Step 1 — Location ─────────────────────────────────────────────────────────
 
-const DARK_SKY_SUGGESTIONS = [
-  { name: 'Cherry Springs', state: 'Pennsylvania', bortle: 2, meta: 'Pennsylvania · Bortle 2', lat: 41.6643, lon: -77.8226 },
-  { name: 'Big Bend NP',    state: 'Texas',        bortle: 1, meta: 'Texas · Bortle 1',        lat: 29.1275, lon: -103.2425 },
-];
+const NEARBY_SUGGESTION_COUNT = 2;
 
 interface SearchResult {
   key: string;
@@ -303,6 +308,38 @@ function StepLocation({ onNext }: { onNext: () => void }) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
   const searchSeq = useRef(0);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+
+  // Quietly use a GPS fix if permission was already granted from a previous
+  // session — never prompt here, since "Use my current location" below is
+  // the explicit ask. Without permission, suggestions just stay unsorted.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos =
+            (await Location.getLastKnownPositionAsync()) ??
+            (await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low }));
+          if (pos && !cancelled) {
+            setUserCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+          }
+        }
+      } catch {
+        // no permission yet — fine, suggestions fall back to default order
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const nearbySuggestions = DARK_SKY_PLACES
+    .map(p => ({
+      ...p,
+      distMi: userCoords ? haversineMiles(userCoords.lat, userCoords.lon, p.lat, p.lon) : null,
+    }))
+    .sort((a, b) => (a.distMi ?? Infinity) - (b.distMi ?? Infinity))
+    .slice(0, NEARBY_SUGGESTION_COUNT);
 
   // Debounced geocode search — expo-location's geocodeAsync resolves a
   // free-text query to coordinates, then we reverse-geocode each match
@@ -379,7 +416,8 @@ function StepLocation({ onNext }: { onNext: () => void }) {
       });
       const city = geo?.city ?? geo?.subregion ?? 'Current Location';
       const region = geo?.region ?? geo?.country ?? '';
-      addLocation(mkLocFromPlace(city, region, 4, pos.coords.latitude, pos.coords.longitude));
+      const bortle = estimateBortle(pos.coords.latitude, pos.coords.longitude);
+      addLocation(mkLocFromPlace(city, region, bortle, pos.coords.latitude, pos.coords.longitude));
       onNext();
     } catch {
       Alert.alert('Error', 'Could not get your location. Please try again.');
@@ -388,13 +426,13 @@ function StepLocation({ onNext }: { onNext: () => void }) {
     }
   }
 
-  function handleSuggestion(s: typeof DARK_SKY_SUGGESTIONS[0]) {
+  function handleSuggestion(s: typeof nearbySuggestions[0]) {
     addLocation(mkLocFromPlace(s.name, s.state, s.bortle, s.lat, s.lon));
     onNext();
   }
 
   function handleSearchResult(r: SearchResult) {
-    addLocation(mkLocFromPlace(r.city, r.region, 4, r.latitude, r.longitude));
+    addLocation(mkLocFromPlace(r.city, r.region, estimateBortle(r.latitude, r.longitude), r.latitude, r.longitude));
     onNext();
   }
 
@@ -472,14 +510,16 @@ function StepLocation({ onNext }: { onNext: () => void }) {
               )
             )
           ) : (
-            DARK_SKY_SUGGESTIONS.map((s) => (
+            nearbySuggestions.map((s) => (
               <TouchableOpacity key={s.name} style={styles.resultRow} onPress={() => handleSuggestion(s)} activeOpacity={0.8}>
                 <View style={styles.resultPin}>
                   <Text style={{ color: ACCENT, fontSize: 14 }}>◐</Text>
                 </View>
                 <View style={styles.resultMain}>
                   <Text style={styles.resultName}>{s.name}</Text>
-                  <Text style={styles.resultMeta}>{s.meta}</Text>
+                  <Text style={styles.resultMeta}>
+                    {s.state} · Bortle {s.bortle}{s.distMi !== null ? ` · ${formatMiles(s.distMi)}` : ''}
+                  </Text>
                 </View>
                 <Text style={[styles.resultPlus, { color: ACCENT }]}>+</Text>
               </TouchableOpacity>
@@ -499,11 +539,44 @@ function StepLocation({ onNext }: { onNext: () => void }) {
 
 function StepInterests({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
+  const { locations } = useLocations();
+  const { addFavorite } = useFavorites();
+  const { setInterests } = useInterests();
   const [selected, setSelected] = useState<Record<string, boolean>>({
     milky: true, deep: true, planets: false, meteors: false,
   });
 
   const toggle = (k: string) => setSelected((p) => ({ ...p, [k]: !p[k] }));
+
+  function handleDone() {
+    // The spot added in the previous step is the most recently appended one.
+    const locIndex = locations.length - 1;
+    const loc = locations[locIndex];
+    if (loc) {
+      if (selected.milky) {
+        addFavorite(`${locIndex}-prime-prime`);
+      }
+      if (selected.deep || selected.planets || selected.meteors) {
+        // Compute the *real* tonight's sky here (pure math, no network) so
+        // we favorite the same objects/indices the location will settle on
+        // once its real forecast loads — not the temporary placeholder data.
+        const bounds = getNightBounds(new Date(), loc.latitude, loc.longitude);
+        const sky = computeTonightsSky(loc.latitude, loc.longitude, loc.bortle, bounds.duskUtcMs, bounds.dawnUtcMs);
+        sky.objects.forEach((obj, i) => {
+          if (obj.category === 'deep' && selected.deep) addFavorite(`${locIndex}-object-${i}`);
+          if (obj.category === 'planets' && selected.planets) addFavorite(`${locIndex}-object-${i}`);
+          if (obj.category === 'meteors' && selected.meteors) addFavorite(`${locIndex}-object-${i}`);
+        });
+      }
+    }
+    setInterests({
+      milky: !!selected.milky,
+      deep: !!selected.deep,
+      planets: !!selected.planets,
+      meteors: !!selected.meteors,
+    });
+    onDone();
+  }
 
   return (
     <View style={styles.page}>
@@ -531,7 +604,7 @@ function StepInterests({ onDone }: { onDone: () => void }) {
               >
                 {/* Check circle */}
                 <View style={[styles.prefCheck, on && { backgroundColor: ACCENT, borderColor: ACCENT }]}>
-                  {on && <Text style={styles.prefCheckMark}>✓</Text>}
+                  {on && <CheckIcon size={12} color="#04130f" strokeWidth={2.8} />}
                 </View>
                 <Text style={styles.prefEmoji}>{p.emoji}</Text>
                 <Text style={styles.prefName}>{p.name}</Text>
@@ -542,7 +615,7 @@ function StepInterests({ onDone }: { onDone: () => void }) {
         </View>
 
         <View style={styles.obFoot}>
-          <TouchableOpacity style={styles.primaryBtn} onPress={onDone} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleDone} activeOpacity={0.85}>
             <Text style={styles.primaryBtnText}>Show me tonight</Text>
           </TouchableOpacity>
           <Dots step={2} />

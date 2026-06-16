@@ -10,10 +10,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
-import { AltPoint } from '../src/data/mockForecast';
+import { AltPoint, DayForecast } from '../src/data/mockForecast';
 import { VERDICTS } from '../src/constants/verdicts';
 import { usePlan } from '../src/context/PlanContext';
 import { useLocations } from '../src/context/LocationsContext';
+import { useAlerts } from '../src/context/AlertsContext';
+import { useFavorites } from '../src/context/FavoritesContext';
+import { useSubscription } from '../src/context/SubscriptionContext';
+import { usePreferences, applyTimeFormat } from '../src/context/PreferencesContext';
+
+// Object visibility quality has its own color scale, independent of the
+// night's overall verdict accent (used elsewhere on this screen).
+const QUALITY_COLOR: Record<string, string> = {
+  Excellent: '#7ef0d2',
+  Good: '#8fd0ff',
+  Mediocre: 'rgba(255,255,255,0.55)',
+};
 
 // ── Altitude chart ────────────────────────────────────────────────────────────
 
@@ -138,6 +150,41 @@ function Compass({ deg, accent }: { deg: number; accent: string }) {
   );
 }
 
+// ── 6-night viewing-quality strip ───────────────────────────────────────────────
+// Replaces the old "best window" mini hour-bars, which just repeated the
+// altitude chart above with no new information. This instead answers a real
+// question: which of the next 6 nights is actually worth coming back for.
+
+function WeekBars({ days, accent }: { days: DayForecast[]; accent: string }) {
+  const BAR_MAX_H = 40;
+  return (
+    <View style={styles.weekBars}>
+      {days.map((d, i) => {
+        const pct = Math.max(0.06, d.score / 100);
+        const isTonight = i === 0;
+        return (
+          <View key={i} style={styles.weekBarCol}>
+            <View style={styles.weekBarTrack}>
+              <View
+                style={[
+                  styles.weekBar,
+                  {
+                    height: pct * BAR_MAX_H,
+                    backgroundColor: isTonight ? accent : 'rgba(255,255,255,0.16)',
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[styles.weekBarLabel, isTonight && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
+              {i === 0 ? 'Now' : d.day}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -150,6 +197,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function ObjectDetailScreen() {
@@ -161,6 +209,8 @@ export default function ObjectDetailScreen() {
   }>();
   const { addToPlan, removeFromPlan, inPlan } = usePlan();
   const { locations } = useLocations();
+  const { hasAlert, getAlert } = useAlerts();
+  const { toggleFavorite, isFavorite } = useFavorites();
 
   const loc = locations[Number(locIndex) ?? 0];
   const isPrime = type === 'prime';
@@ -169,8 +219,18 @@ export default function ObjectDetailScreen() {
   const v = VERDICTS[dayVerdict];
   const accent = v.accent;
 
+  const { status } = useSubscription();
+  const { use24h } = usePreferences();
+  const fmt = (s: string) => applyTimeFormat(s, use24h);
+  const isPro = status !== 'free';
+
   const planKey = `${locIndex}-${type}-${objIndex ?? 'prime'}`;
   const planned = inPlan(planKey);
+  const favorited = isFavorite(planKey);
+  const alertKey = `alert-${planKey}`;
+  const alertSet = hasAlert(alertKey);
+  const alertRecord = getAlert(alertKey);
+  const alertCount = alertRecord?.fires.length ?? 0;
 
   // Build detail fields from either prime or sky object
   const name = obj.name;
@@ -184,33 +244,44 @@ export default function ObjectDetailScreen() {
   const size = isPrime ? '—' : (obj as typeof loc.objects[0]).size;
   const dirLabel = isPrime ? (obj as typeof loc.prime).dir : (obj as typeof loc.objects[0]).dirLabel;
   const dirDeg = isPrime ? (obj as typeof loc.prime).dirDeg : (obj as typeof loc.objects[0]).dirDeg;
-  const quality = isPrime ? v.label : (obj as typeof loc.objects[0]).quality.toUpperCase();
+  const qualityWord = isPrime ? v.label : (obj as typeof loc.objects[0]).quality;
+  const qualityColor = isPrime ? accent : (QUALITY_COLOR[qualityWord] ?? '#fff');
 
-  // Hour bars for the best window (reuse first day hourly, show 7 bars)
-  const hourBars = loc.days[0].hourly.slice(1, 8);
-  const maxBar = Math.max(...hourBars);
+  function openAlertSetup() {
+    router.push({
+      pathname: '/set-alert',
+      params: { locIndex: String(locIndex), type, objIndex: objIndex ?? '', objectName: name },
+    });
+  }
 
   return (
     <LinearGradient colors={['#04060e', '#06121f', '#0a1e2e']} style={styles.container}>
+      {/* Sticky nav — sits above the ScrollView so content scrolls underneath it */}
+      <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={styles.navBack} onPress={() => router.back()} activeOpacity={0.7}>
+          <Text style={styles.navBackChev}>‹</Text>
+          <Text style={styles.navBackLabel}>Tonight</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navStar}
+          activeOpacity={0.7}
+          onPress={() => toggleFavorite(planKey)}
+        >
+          <Text style={[styles.navStarIcon, favorited && { color: accent }]}>
+            {favorited ? '★' : '☆'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: 12, paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Nav */}
-        <View style={styles.nav}>
-          <TouchableOpacity style={styles.navBack} onPress={() => router.back()} activeOpacity={0.7}>
-            <Text style={styles.navBackChev}>‹</Text>
-            <Text style={styles.navBackLabel}>Tonight</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navStar} activeOpacity={0.7}>
-            <Text style={styles.navStarIcon}>☆</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Header */}
         <View style={styles.header}>
-          <Text style={[styles.eyebrow, { color: accent }]}>
-            {isPrime ? 'PRIME TARGET' : (obj as typeof loc.objects[0]).type.toUpperCase()} · {quality}
+          <Text style={styles.eyebrow}>
+            {isPrime ? 'PRIME TARGET' : (obj as typeof loc.objects[0]).type.toUpperCase()}{' '}
+            <Text style={{ color: qualityColor }}>· {qualityWord.toUpperCase()}</Text>
           </Text>
           <Text style={styles.title}>{name}</Text>
           <Text style={styles.titleSub}>{sub}</Text>
@@ -225,26 +296,15 @@ export default function ObjectDetailScreen() {
         {/* Best window card */}
         <View style={[styles.windowCard, { borderColor: accent + '55', backgroundColor: accent + '14' }]}>
           <Text style={[styles.windowLabel, { color: accent }]}>BEST WINDOW TONIGHT</Text>
-          <Text style={styles.windowTime}>{window_}</Text>
-          {/* Mini hour bars */}
-          <View style={styles.miniBars}>
-            {hourBars.map((v2, i) => (
-              <View
-                key={i}
-                style={[styles.miniBar, {
-                  height: Math.max(6, (v2 / maxBar) * 36),
-                  backgroundColor: accent,
-                  opacity: 0.5 + (v2 / maxBar) * 0.5,
-                }]}
-              />
-            ))}
-          </View>
+          <Text style={styles.windowTime}>{fmt(window_)}</Text>
+          <Text style={styles.weekBarsCaption}>VIEWING QUALITY THIS WEEK</Text>
+          <WeekBars days={loc.days} accent={accent} />
         </View>
 
         {/* Stats 2×2 */}
         <View style={styles.statsGrid}>
-          <StatCard label="PEAK ALTITUDE" value={`${peakAlt}°`} sub={`at ${peakTime}`} />
-          <StatCard label="TRANSIT" value={transit.split(' ')[0]} sub={transit.split(' ').slice(1).join(' ')} />
+          <StatCard label="PEAK ALTITUDE" value={`${peakAlt}°`} sub={`at ${fmt(peakTime)}`} />
+          <StatCard label="TRANSIT" value={fmt(transit.split(' ')[0])} sub={transit.split(' ').slice(1).join(' ')} />
           <StatCard label="MAGNITUDE" value={mag} />
           <StatCard label="APPARENT SIZE" value={size} />
         </View>
@@ -270,8 +330,23 @@ export default function ObjectDetailScreen() {
             {planned ? '✓ In your plan' : 'Add to plan'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.alertBtn, { backgroundColor: accent }]} activeOpacity={0.8}>
-          <Text style={[styles.alertBtnText, { color: '#04130f' }]}>Set alert</Text>
+        <TouchableOpacity
+          style={[
+            styles.alertBtn,
+            isPro
+              ? alertSet
+                ? { borderWidth: 1.5, borderColor: accent, backgroundColor: accent + '18' }
+                : { backgroundColor: accent }
+              : { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.06)' },
+          ]}
+          activeOpacity={0.8}
+          onPress={isPro ? openAlertSetup : () => router.push('/paywall')}
+        >
+          <Text style={[styles.alertBtnText, { color: isPro ? (alertSet ? accent : '#04130f') : 'rgba(255,255,255,0.55)' }]}>
+            {isPro
+              ? alertSet ? `✓ ${alertCount} alert${alertCount === 1 ? '' : 's'} set` : 'Set alert'
+              : '⭐ Upgrade for alerts'}
+          </Text>
         </TouchableOpacity>
       </View>
     </LinearGradient>
@@ -288,14 +363,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    paddingBottom: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+    backgroundColor: '#04060e',
   },
-  navBack: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  navBackChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 20, color: '#7ef0d2', lineHeight: 24 },
-  navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15, color: '#7ef0d2' },
+  navBack: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  navBackChev: { fontFamily: 'SpaceGrotesk_600SemiBold', fontSize: 26, lineHeight: 30, color: '#fff' },
   navStar: { padding: 4 },
-  navStarIcon: { fontSize: 20, color: 'rgba(255,255,255,0.5)' },
+  navStarIcon: { fontSize: 22, color: 'rgba(255,255,255,0.5)' },
+  navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 18, color: '#fff' },
 
   header: { paddingTop: 8, paddingBottom: 18, gap: 3 },
   eyebrow: {
@@ -303,6 +379,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 1.5,
+    color: 'rgba(255,255,255,0.5)',
   },
   title: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -358,15 +435,38 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
     marginBottom: 14,
   },
-  miniBars: {
+  weekBarsCaption: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 9.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 10,
+  },
+  weekBars: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 5,
-    height: 40,
+    gap: 6,
   },
-  miniBar: {
+  weekBarCol: {
     flex: 1,
-    borderRadius: 3,
+    alignItems: 'center',
+    gap: 6,
+  },
+  weekBarTrack: {
+    width: '100%',
+    height: 40,
+    justifyContent: 'flex-end',
+  },
+  weekBar: {
+    width: '100%',
+    borderRadius: 4,
+    minHeight: 4,
+  },
+  weekBarLabel: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 10.5,
+    color: 'rgba(255,255,255,0.4)',
   },
 
   statsGrid: {
@@ -464,4 +564,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+
 });

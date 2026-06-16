@@ -14,6 +14,11 @@ import { StyleSheet } from 'react-native';
 import { NightVisionProvider } from '../src/context/NightVisionContext';
 import { PlanProvider } from '../src/context/PlanContext';
 import { LocationsProvider } from '../src/context/LocationsContext';
+import { AlertsProvider } from '../src/context/AlertsContext';
+import { FavoritesProvider } from '../src/context/FavoritesContext';
+import { InterestsProvider } from '../src/context/InterestsContext';
+import { SubscriptionProvider } from '../src/context/SubscriptionContext';
+import { PreferencesProvider } from '../src/context/PreferencesContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -37,6 +42,11 @@ export default function RootLayout() {
     <NightVisionProvider>
       <LocationsProvider>
       <PlanProvider>
+      <AlertsProvider>
+      <FavoritesProvider>
+      <InterestsProvider>
+      <SubscriptionProvider>
+      <PreferencesProvider>
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
           <Stack.Screen name="onboarding" />
@@ -47,8 +57,18 @@ export default function RootLayout() {
           <Stack.Screen name="factor-detail" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="manage-locations" />
           <Stack.Screen name="add-location" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="set-alert" options={{ presentation: 'modal' }} />
           <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="about" />
+          <Stack.Screen name="privacy-policy" />
+          <Stack.Screen name="terms" />
+          <Stack.Screen name="redeem-code" />
         </Stack>
+      </PreferencesProvider>
+      </SubscriptionProvider>
+      </InterestsProvider>
+      </FavoritesProvider>
+      </AlertsProvider>
       </PlanProvider>
       </LocationsProvider>
     </NightVisionProvider>

@@ -1,6 +1,10 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { FORECAST, Location } from '../data/mockForecast';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Location } from '../data/mockForecast';
 import { buildRealForecast } from '../services/forecastEngine';
+
+const STORAGE_KEY_LOCATIONS = 'starcast:locations';
+const STORAGE_KEY_ACTIVE_INDEX = 'starcast:activeLocIndex';
 
 interface LocationsContextValue {
   locations: Location[];
@@ -8,27 +12,70 @@ interface LocationsContextValue {
   setActiveLocIndex: (i: number) => void;
   addLocation: (loc: Location) => void;
   removeLocation: (index: number) => void;
+  hydrated: boolean;
 }
 
 const LocationsContext = createContext<LocationsContextValue>({
-  locations: FORECAST,
+  locations: [],
   activeLocIndex: 0,
   setActiveLocIndex: () => {},
   addLocation: () => {},
   removeLocation: () => {},
+  hydrated: false,
 });
 
 export function LocationsProvider({ children }: { children: React.ReactNode }) {
-  const [locations, setLocations] = useState<Location[]>(FORECAST);
+  // Starts empty — onboarding is what adds the user's first real spot.
+  // Built-in mock demo data is never auto-loaded for real users.
+  const [locations, setLocations] = useState<Location[]>([]);
   const [activeLocIndex, setActiveLocIndex] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
 
-  // Replaces a location's synthetic placeholder days with real
-  // cloud/seeing/moon-derived data, matched by name once the fetch resolves.
+  // Load whatever was saved from a previous session before anything else runs.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [savedLocations, savedIndex] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEY_LOCATIONS),
+          AsyncStorage.getItem(STORAGE_KEY_ACTIVE_INDEX),
+        ]);
+        if (savedLocations) {
+          const parsed: Location[] = JSON.parse(savedLocations);
+          setLocations(parsed);
+          if (savedIndex) {
+            const idx = Number(savedIndex);
+            setActiveLocIndex(Math.max(0, Math.min(idx, parsed.length - 1)));
+          }
+        }
+      } catch {
+        // Corrupt/unavailable storage — start fresh rather than crash.
+      } finally {
+        setHydrated(true);
+      }
+    })();
+  }, []);
+
+  // Persist on every change, but only after the initial load completes —
+  // otherwise we'd briefly overwrite saved data with the empty initial state.
+  useEffect(() => {
+    if (!hydrated) return;
+    AsyncStorage.setItem(STORAGE_KEY_LOCATIONS, JSON.stringify(locations)).catch(() => {});
+  }, [locations, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    AsyncStorage.setItem(STORAGE_KEY_ACTIVE_INDEX, String(activeLocIndex)).catch(() => {});
+  }, [activeLocIndex, hydrated]);
+
+  // Replaces a location's synthetic placeholder days AND its hardcoded
+  // "Andromeda + Orion" placeholder objects with real cloud/seeing/moon
+  // forecasts and real positional-astronomy sky targets, matched by name
+  // once the fetch/computation resolves.
   const refreshFromApis = useCallback((loc: Location) => {
     buildRealForecast(loc.latitude, loc.longitude, loc.bortle)
-      .then(({ days, dusk, dawn }) => {
+      .then(({ days, dusk, dawn, prime, objects }) => {
         setLocations(prev =>
-          prev.map(l => (l.name === loc.name ? { ...l, days, dusk, dawn } : l))
+          prev.map(l => (l.name === loc.name ? { ...l, days, dusk, dawn, prime, objects } : l))
         );
       })
       .catch(() => {
@@ -36,10 +83,14 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Backfill real data for the built-in demo locations on first load too.
+  // Refresh real data for every restored location once on hydration too,
+  // so reopening the app doesn't show stale numbers indefinitely.
+  const refreshedOnHydrate = useRef(false);
   useEffect(() => {
-    FORECAST.forEach(refreshFromApis);
-  }, [refreshFromApis]);
+    if (!hydrated || refreshedOnHydrate.current) return;
+    refreshedOnHydrate.current = true;
+    locations.forEach(refreshFromApis);
+  }, [hydrated, locations, refreshFromApis]);
 
   const addLocation = useCallback((loc: Location) => {
     setLocations(prev => {
@@ -64,7 +115,7 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <LocationsContext.Provider value={{ locations, activeLocIndex, setActiveLocIndex, addLocation, removeLocation }}>
+    <LocationsContext.Provider value={{ locations, activeLocIndex, setActiveLocIndex, addLocation, removeLocation, hydrated }}>
       {children}
     </LocationsContext.Provider>
   );

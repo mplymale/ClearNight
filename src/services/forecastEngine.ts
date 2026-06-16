@@ -1,10 +1,11 @@
-import { DayForecast, NightWindow } from '../data/mockForecast';
+import { DayForecast, NightWindow, PrimeTarget, SkyObject } from '../data/mockForecast';
 import { verdictFromScore } from '../constants/verdicts';
 import { fetchCloudCover, cloudAt, CloudSeries } from './openMeteo';
 import { fetchSeeing, seeingAt, SeeingSeries } from './sevenTimer';
 import { getNightBounds, getMoonIlluminationPct, getMoonPhaseName } from './moon';
 import { computeScore, findBestWindow, HourPoint } from './scoreEngine';
 import { formatClockShort, formatHourWord, formatWindowLabel, formatDuration } from './timeFormat';
+import { computeTonightsSky } from './skyObjects';
 
 const SEEING_WORD: Record<number, string> = { 5: 'Excellent', 4: 'Good', 3: 'Fair', 2: 'Poor', 1: 'Bad' };
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -15,6 +16,8 @@ export interface RealForecastResult {
   days: DayForecast[];
   dusk: string; // tonight's dusk, for the arc's fixed end label
   dawn: string; // tonight's dawn
+  prime: PrimeTarget;
+  objects: SkyObject[];
 }
 
 export async function buildRealForecast(lat: number, lon: number, bortle: number): Promise<RealForecastResult> {
@@ -31,6 +34,8 @@ export async function buildRealForecast(lat: number, lon: number, bortle: number
   const days: DayForecast[] = [];
   let tonightDusk = '';
   let tonightDawn = '';
+  let tonightDuskMs = 0;
+  let tonightDawnMs = 0;
 
   for (let i = 0; i < 6; i++) {
     // Noon, local time at the spot, converted to an absolute UTC instant —
@@ -105,8 +110,12 @@ export async function buildRealForecast(lat: number, lon: number, bortle: number
     if (i === 0) {
       tonightDusk = formatClockShort(bounds.duskUtcMs, utcOffsetSeconds);
       tonightDawn = formatClockShort(bounds.dawnUtcMs, utcOffsetSeconds);
+      tonightDuskMs = bounds.duskUtcMs;
+      tonightDawnMs = bounds.dawnUtcMs;
     }
   }
 
-  return { days, dusk: tonightDusk, dawn: tonightDawn };
+  const sky = computeTonightsSky(lat, lon, bortle, tonightDuskMs, tonightDawnMs);
+
+  return { days, dusk: tonightDusk, dawn: tonightDawn, prime: sky.prime, objects: sky.objects };
 }

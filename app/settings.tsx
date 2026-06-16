@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   LayoutChangeEvent,
+  Modal,
   PanResponder,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,9 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD } from '../src/context/NightVisionContext';
+import { usePreferences, formatQuietHours } from '../src/context/PreferencesContext';
+import { CheckIcon } from '../src/components/common/CheckIcon';
+import { ThreshPreset } from '../src/components/common/ThreshPreset';
 
 type Tier = 'free' | 'trial' | 'premium';
 
@@ -76,69 +80,17 @@ function SegControl({ options, value, onChange, accent = '#7ef0d2' }: {
 
 // ── Threshold slider ──────────────────────────────────────────────────────────
 
-function ThreshSlider({ value, onChange, accent = '#7ef0d2', divider }: {
+function ThreshPresetRow({ value, onChange, accent = '#7ef0d2', divider }: {
   value: number;
   onChange: (v: number) => void;
   accent?: string;
   divider?: string;
 }) {
-  const trackWidth = useRef(0);
-  const trackRef = useRef<View>(null);
-  const startValue = useRef(0);
-  const startPageX = useRef(0);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        startPageX.current = e.nativeEvent.pageX;
-        startValue.current = value;
-        // Also snap to tap position
-        trackRef.current?.measure((_x, _y, _w, _h, px) => {
-          const pct = Math.max(0, Math.min(1, (e.nativeEvent.pageX - px) / trackWidth.current));
-          startValue.current = Math.round(pct * 100);
-          startPageX.current = e.nativeEvent.pageX;
-          onChange(startValue.current);
-        });
-      },
-      onPanResponderMove: (_e, gs) => {
-        const delta = (gs.dx / trackWidth.current) * 100;
-        onChange(Math.round(Math.max(0, Math.min(100, startValue.current + delta))));
-      },
-    })
-  ).current;
-
-  const verdictLabel = value >= 78 ? 'GO' : value >= 62 ? 'GO' : value >= 42 ? 'COND' : 'Any';
-  const knobLeft = trackWidth.current > 0 ? (value / 100) * trackWidth.current - 11 : 0;
-  const fillWidth = trackWidth.current > 0 ? (value / 100) * trackWidth.current : 0;
-
   return (
     <View style={[styles.sliderWrap, divider && { borderBottomColor: divider }]}>
-      <Text style={styles.rowName}>Alert me when tonight scores</Text>
-      <View
-        ref={trackRef}
-        style={styles.sliderTrack}
-        onLayout={(e: LayoutChangeEvent) => {
-          trackWidth.current = e.nativeEvent.layout.width;
-        }}
-        {...panResponder.panHandlers}
-      >
-        <LinearGradient
-          colors={['#ffc27a', accent]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[styles.sliderFill, { width: fillWidth }]}
-          pointerEvents="none"
-        />
-        <View style={[styles.sliderKnob, { left: knobLeft }]} pointerEvents="none" />
-      </View>
-      <View style={styles.sliderScale}>
-        <Text style={styles.sliderScaleText}>0</Text>
-        <Text style={[styles.sliderScaleText, { color: accent }]}>
-          {verdictLabel} · {value}+
-        </Text>
-        <Text style={styles.sliderScaleText}>100</Text>
+      <Text style={styles.rowName}>Alert me on</Text>
+      <View style={{ marginTop: 12 }}>
+        <ThreshPreset value={value} onChange={onChange} accent={accent} />
       </View>
     </View>
   );
@@ -194,6 +146,200 @@ function PremPill() {
   );
 }
 
+// ── Quiet hours picker modal ──────────────────────────────────────────────────
+
+const HOURS_24 = Array.from({ length: 24 }, (_, i) => i);
+
+function hourLabel(h: number, use24h: boolean): string {
+  if (use24h) return `${String(h).padStart(2, '0')}:00`;
+  if (h === 0) return '12am';
+  if (h < 12) return `${h}am`;
+  if (h === 12) return '12pm';
+  return `${h - 12}pm`;
+}
+
+function QuietHoursPicker({
+  visible,
+  quietStart,
+  quietEnd,
+  use24h,
+  accent,
+  onChangeStart,
+  onChangeEnd,
+  onClose,
+}: {
+  visible: boolean;
+  quietStart: number;
+  quietEnd: number;
+  use24h: boolean;
+  accent: string;
+  onChangeStart: (h: number) => void;
+  onChangeEnd: (h: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={qStyles.backdrop} activeOpacity={1} onPress={onClose} />
+      <View style={qStyles.sheet}>
+        <View style={qStyles.handle} />
+        <Text style={qStyles.title}>Quiet hours</Text>
+        <Text style={qStyles.sub}>Notifications won't fire during this window</Text>
+
+        <View style={qStyles.columns}>
+          {/* Start column */}
+          <View style={qStyles.col}>
+            <Text style={qStyles.colLabel}>FROM</Text>
+            <ScrollView
+              style={qStyles.scroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={qStyles.scrollContent}
+            >
+              {HOURS_24.map((h) => {
+                const selected = h === quietStart;
+                return (
+                  <TouchableOpacity
+                    key={h}
+                    style={[qStyles.hourBtn, selected && { backgroundColor: accent + '22', borderColor: accent }]}
+                    onPress={() => onChangeStart(h)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[qStyles.hourText, selected && { color: accent }]}>
+                      {hourLabel(h, use24h)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <View style={qStyles.dividerVert} />
+
+          {/* End column */}
+          <View style={qStyles.col}>
+            <Text style={qStyles.colLabel}>UNTIL</Text>
+            <ScrollView
+              style={qStyles.scroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={qStyles.scrollContent}
+            >
+              {HOURS_24.map((h) => {
+                const selected = h === quietEnd;
+                return (
+                  <TouchableOpacity
+                    key={h}
+                    style={[qStyles.hourBtn, selected && { backgroundColor: accent + '22', borderColor: accent }]}
+                    onPress={() => onChangeEnd(h)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[qStyles.hourText, selected && { color: accent }]}>
+                      {hourLabel(h, use24h)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+
+        <TouchableOpacity style={[qStyles.doneBtn, { backgroundColor: accent }]} onPress={onClose} activeOpacity={0.85}>
+          <Text style={qStyles.doneBtnText}>Done</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
+const qStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  sheet: {
+    backgroundColor: '#0e1320',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginBottom: 18,
+  },
+  title: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  sub: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  columns: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  col: {
+    flex: 1,
+  },
+  colLabel: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  scroll: {
+    maxHeight: 220,
+  },
+  scrollContent: {
+    gap: 6,
+  },
+  hourBtn: {
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+  },
+  hourText: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.55)',
+  },
+  dividerVert: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignSelf: 'stretch',
+  },
+  doneBtn: {
+    borderRadius: 999,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  doneBtnText: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#04130f',
+  },
+});
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
@@ -201,10 +347,9 @@ export default function SettingsScreen() {
   const [tier, setTier] = useState<Tier>('premium');
   const [thresh, setThresh] = useState(78);
   const [push, setPush] = useState(true);
+  const [quietPickerVisible, setQuietPickerVisible] = useState(false);
   const { nightVision, setNightVision } = useNightVision();
-  const [tempUnit, setTempUnit] = useState('°F');
-  const [clockFmt, setClockFmt] = useState('12h');
-  const [milkyWay, setMilkyWay] = useState(true);
+  const { use24h, setUse24h, useCelsius, setUseCelsius, quietStart, quietEnd, setQuietStart, setQuietEnd } = usePreferences();
 
   const isPremium = tier === 'premium';
   const unlocked = tier !== 'free';
@@ -261,7 +406,7 @@ export default function SettingsScreen() {
                 <Text style={styles.premTitle}>StarCast Premium</Text>
                 <Text style={styles.premSub}>All features unlocked · thank you</Text>
               </View>
-              <Text style={[styles.premCheck, { color: ACCENT }]}>✓</Text>
+              <CheckIcon size={18} color={ACCENT} strokeWidth={2.5} />
             </View>
           ) : (
             <TouchableOpacity style={[styles.upgradeCard, { borderColor: ACCENT, backgroundColor: nightVision ? 'rgba(224,120,48,0.10)' : 'rgba(126,240,210,0.08)' }]} activeOpacity={0.8}>
@@ -289,7 +434,7 @@ export default function SettingsScreen() {
           <Card border={cardBorder} bg={cardBg}>
             {unlocked ? (
               <>
-                <ThreshSlider value={thresh} onChange={setThresh} accent={ACCENT} divider={rowDivider} />
+                <ThreshPresetRow value={thresh} onChange={setThresh} accent={ACCENT} divider={rowDivider} />
                 <Row
                   name="Push notifications"
                   sub="A nudge by 6pm on good nights"
@@ -298,8 +443,8 @@ export default function SettingsScreen() {
                 />
                 <Row
                   name="Quiet hours"
-                  right={<Text style={styles.rowVal}>11pm – 7am  ›</Text>}
-                  onPress={() => {}}
+                  right={<Text style={styles.rowVal}>{formatQuietHours(quietStart, quietEnd, use24h)}  ›</Text>}
+                  onPress={() => setQuietPickerVisible(true)}
                   borderless
                 />
               </>
@@ -334,18 +479,12 @@ export default function SettingsScreen() {
             />
             <Row
               name="Temperature"
-              right={<SegControl options={['°F', '°C']} value={tempUnit} onChange={setTempUnit} accent={ACCENT} />}
+              right={<SegControl options={['°F', '°C']} value={useCelsius ? '°C' : '°F'} onChange={(v) => setUseCelsius(v === '°C')} accent={ACCENT} />}
               divider={rowDivider}
             />
             <Row
               name="Time format"
-              right={<SegControl options={['12h', '24h']} value={clockFmt} onChange={setClockFmt} accent={ACCENT} />}
-              divider={rowDivider}
-            />
-            <Row
-              name="Show Milky Way band"
-              sub="Overlay on the sky view"
-              right={<Toggle value={milkyWay} onToggle={() => setMilkyWay((v) => !v)} accent={ACCENT} />}
+              right={<SegControl options={['12h', '24h']} value={use24h ? '24h' : '12h'} onChange={(v) => setUse24h(v === '24h')} accent={ACCENT} />}
               borderless
             />
           </Card>
@@ -356,17 +495,28 @@ export default function SettingsScreen() {
           <SectionLabel text="Account" />
           <Card border={cardBorder} bg={cardBg}>
             <Row
-              name="Gear"
-              sub='8" Dobsonian · DSLR'
+              name="Redeem offer code"
               right={<Text style={styles.rowChev}>›</Text>}
-              onPress={() => {}}
+              onPress={() => router.push('/redeem-code')}
+              divider={rowDivider}
+            />
+            <Row
+              name="Privacy Policy"
+              right={<Text style={styles.rowChev}>›</Text>}
+              onPress={() => router.push('/privacy-policy')}
+              divider={rowDivider}
+            />
+            <Row
+              name="Terms of Use"
+              right={<Text style={styles.rowChev}>›</Text>}
+              onPress={() => router.push('/terms')}
               divider={rowDivider}
             />
             <Row
               name="About StarCast"
               sub="Version 1.0"
               right={<Text style={styles.rowChev}>›</Text>}
-              onPress={() => {}}
+              onPress={() => router.push('/about')}
               borderless
             />
           </Card>
@@ -374,6 +524,17 @@ export default function SettingsScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      <QuietHoursPicker
+        visible={quietPickerVisible}
+        quietStart={quietStart}
+        quietEnd={quietEnd}
+        use24h={use24h}
+        accent={ACCENT}
+        onChangeStart={setQuietStart}
+        onChangeEnd={setQuietEnd}
+        onClose={() => setQuietPickerVisible(false)}
+      />
     </LinearGradient>
   );
 }
@@ -544,45 +705,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  sliderTrack: {
-    height: 6,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginTop: 16,
-    marginBottom: 10,
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  sliderFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 4,
-  },
-  sliderKnob: {
-    position: 'absolute',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#fff',
-    marginLeft: -11,
-    top: -8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  sliderScale: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sliderScaleText: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.42)',
   },
 
   // membership — premium status card

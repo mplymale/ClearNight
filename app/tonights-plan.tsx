@@ -2,22 +2,15 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
 import { usePlan } from '../src/context/PlanContext';
+import { AppLogo } from '../src/components/common/AppLogo';
+import { CheckIcon } from '../src/components/common/CheckIcon';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
 import { Location } from '../src/data/mockForecast';
+import { parseWindowStartDate, parseWindowEndDate } from '../src/services/alertScheduling';
+import { usePreferences, applyTimeFormat } from '../src/context/PreferencesContext';
 
-function SparkleIcon() {
-  return (
-    <Svg width={32} height={32} viewBox="0 0 32 32" fill="none">
-      <Path
-        d="M16 4 C16 4 17 12 24 16 C17 16 17 24 16 28 C16 28 15 20 8 16 C15 16 15 8 16 4Z"
-        fill="#7ef0d2"
-      />
-    </Svg>
-  );
-}
 
 function resolvePlanKey(key: string, locations: Location[]) {
   const parts = key.split('-');
@@ -69,14 +62,42 @@ function parseWindowBounds(windows: string[]): string {
   return `${starts[0]} – ${ends[ends.length - 1]}`;
 }
 
+const EXPIRY_GRACE_MS = 60 * 60 * 1000; // keep an item active for 1hr after its window closes
+
+function compareByWindow(a: { window: string }, b: { window: string }): number {
+  const aStart = parseWindowStartDate(a.window)?.getTime() ?? Infinity;
+  const bStart = parseWindowStartDate(b.window)?.getTime() ?? Infinity;
+  if (aStart !== bStart) return aStart - bStart;
+
+  const aEnd = parseWindowEndDate(a.window)?.getTime() ?? Infinity;
+  const bEnd = parseWindowEndDate(b.window)?.getTime() ?? Infinity;
+  return aEnd - bEnd;
+}
+
 export default function TonightsPlanScreen() {
   const insets = useSafeAreaInsets();
-  const { plan, removeFromPlan } = usePlan();
+  const { plan, removeFromPlan, captured, toggleCaptured } = usePlan();
   const { locations } = useLocations();
+  const { use24h } = usePreferences();
+  const fmt = (s: string) => applyTimeFormat(s, use24h);
 
-  const items = Array.from(plan)
+  const resolved = Array.from(plan)
     .map(key => resolvePlanKey(key, locations))
     .filter(Boolean) as NonNullable<ReturnType<typeof resolvePlanKey>>[];
+
+  // Nothing is ever auto-deleted — once a window's been closed for over an
+  // hour, the item just fades and sinks to the bottom, sorted among the
+  // other expired items the same way, so the active list up top stays
+  // exactly the ones still worth going outside for.
+  const now = Date.now();
+  const isExpired = (item: { window: string }) => {
+    const end = parseWindowEndDate(item.window)?.getTime();
+    return end !== undefined && now - end > EXPIRY_GRACE_MS;
+  };
+
+  const active = resolved.filter((i) => !isExpired(i)).sort(compareByWindow);
+  const expired = resolved.filter((i) => isExpired(i)).sort(compareByWindow);
+  const items = [...active, ...expired];
 
   const overallWindow = parseWindowBounds(items.map((i) => i.window));
   // Use the accent from the first item (or default teal)
@@ -97,7 +118,7 @@ export default function TonightsPlanScreen() {
       {items.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}>
-            <SparkleIcon />
+            <AppLogo size={64} animate={false} />
           </View>
           <Text style={styles.emptyTitle}>No targets yet</Text>
           <Text style={styles.emptyBody}>
@@ -122,42 +143,56 @@ export default function TonightsPlanScreen() {
             ) : null}
           </View>
 
-          {items.map((item, idx) => (
-            <TouchableOpacity
-              key={item.key}
-              style={styles.card}
-              activeOpacity={0.8}
-              onPress={() =>
-                router.push({
-                  pathname: '/object-detail',
-                  params: {
-                    locIndex: String(item.locIndex),
-                    type: item.type,
-                    ...(item.type === 'object' ? { objIndex: String((item as any).objIndex) } : {}),
-                  },
-                })
-              }
-            >
-              {/* Numbered circle */}
-              <View style={styles.numCircle}>
-                <Text style={styles.numText}>{idx + 1}</Text>
-              </View>
-
-              <View style={styles.cardText}>
-                <Text style={styles.cardName}>{item.name}</Text>
-                <Text style={styles.cardSub}>{item.sub}</Text>
-                <Text style={[styles.cardWindow, { color: item.accent }]}>{item.window}</Text>
-              </View>
-
+          {items.map((item, idx) => {
+            const done = captured.has(item.key);
+            const expiredItem = isExpired(item);
+            return (
               <TouchableOpacity
-                style={styles.removeBtn}
-                onPress={() => removeFromPlan(item.key)}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                key={item.key}
+                style={[styles.card, expiredItem && styles.cardExpired]}
+                activeOpacity={0.8}
+                onPress={() =>
+                  router.push({
+                    pathname: '/object-detail',
+                    params: {
+                      locIndex: String(item.locIndex),
+                      type: item.type,
+                      ...(item.type === 'object' ? { objIndex: String((item as any).objIndex) } : {}),
+                    },
+                  })
+                }
               >
-                <Text style={styles.removeBtnText}>✕</Text>
+                {/* Tap to mark as captured/checked off — a simple "did I get this" toggle */}
+                <TouchableOpacity
+                  style={[styles.numCircle, done && { borderColor: item.accent, backgroundColor: item.accent + '22' }]}
+                  onPress={() => toggleCaptured(item.key)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  {done
+                    ? <CheckIcon size={14} color={item.accent} strokeWidth={2.8} />
+                    : <Text style={styles.numText}>{idx + 1}</Text>
+                  }
+                </TouchableOpacity>
+
+                <View style={styles.cardText}>
+                  <Text style={[styles.cardName, done && styles.cardNameDone]}>{item.name}</Text>
+                  <Text style={styles.cardSub}>{item.sub}</Text>
+                  <Text style={[styles.cardWindow, { color: item.accent }]}>
+                    {fmt(item.window)}{expiredItem ? ' · closed' : ''}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.removeBtn}
+                  onPress={() => removeFromPlan(item.key)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                >
+                  <Text style={styles.removeBtnText}>✕</Text>
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+            );
+          })}
         </ScrollView>
       )}
     </View>
@@ -249,6 +284,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 16,
   },
+  cardExpired: {
+    opacity: 0.45,
+  },
   numCircle: {
     width: 40,
     height: 40,
@@ -276,6 +314,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     letterSpacing: -0.2,
   },
+  cardNameDone: {
+    textDecorationLine: 'line-through',
+    color: 'rgba(255,255,255,0.6)',
+  },
   cardSub: {
     fontFamily: 'HankenGrotesk_400Regular',
     fontSize: 13,
@@ -292,8 +334,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   removeBtnText: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.28)',
+    fontSize: 22,
+    color: 'rgba(255,255,255,0.35)',
+    lineHeight: 24,
   },
 
   empty: {
@@ -304,15 +347,16 @@ const styles = StyleSheet.create({
     marginBottom: 60,
   },
   emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
+    width: 90,
+    height: 90,
+    borderRadius: 24,
     backgroundColor: 'rgba(15,22,30,1)',
     borderWidth: 1.5,
-    borderColor: '#7ef0d2',
+    borderColor: 'rgba(126,240,210,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 22,
+    overflow: 'hidden',
   },
   emptyTitle: {
     fontFamily: 'SpaceGrotesk_600SemiBold',

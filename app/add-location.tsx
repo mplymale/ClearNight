@@ -14,55 +14,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocations } from '../src/context/LocationsContext';
+import { useSubscription } from '../src/context/SubscriptionContext';
+import { CheckIcon } from '../src/components/common/CheckIcon';
 import { mkLocFromPlace } from '../src/data/mockForecast';
 import { haversineMiles, formatMiles } from '../src/services/geo';
+import { estimateBortle } from '../src/services/bortleEstimate';
+import { DARK_SKY_PLACES, DarkSkyPlace as Place } from '../src/data/darkSkyPlaces';
 
 const ACCENT = '#7ef0d2';
-
-interface Place {
-  name: string;
-  state: string;
-  bortle: number;
-  lat: number;
-  lon: number;
-}
-
-// A broader set of real IDA-certified (or similarly recognized) dark-sky
-// places with global coverage, so "nearby" has a realistic chance of
-// actually being nearby no matter where the user is.
-const DARK_SKY_PLACES: Place[] = [
-  // United States
-  { name: 'Big Bend NP',           state: 'Texas',          bortle: 1, lat: 29.1275,  lon: -103.2425 },
-  { name: 'Death Valley NP',       state: 'California',     bortle: 2, lat: 36.5054,  lon: -117.0794 },
-  { name: 'Mauna Kea',             state: 'Hawaii',          bortle: 2, lat: 19.8207,  lon: -155.4681 },
-  { name: 'Joshua Tree NP',        state: 'California',     bortle: 3, lat: 33.8734,  lon: -115.9010 },
-  { name: 'Cherry Springs',        state: 'Pennsylvania',   bortle: 2, lat: 41.6643,  lon: -77.8226 },
-  { name: 'Natural Bridges NM',    state: 'Utah',           bortle: 1, lat: 37.6028,  lon: -110.0138 },
-  { name: 'Canyonlands NP',        state: 'Utah',           bortle: 1, lat: 38.3269,  lon: -109.8783 },
-  { name: 'Capitol Reef NP',       state: 'Utah',           bortle: 2, lat: 38.3670,  lon: -111.2615 },
-  { name: 'Great Basin NP',        state: 'Nevada',         bortle: 1, lat: 38.9831,  lon: -114.3000 },
-  { name: 'Chaco Culture NHP',     state: 'New Mexico',     bortle: 1, lat: 36.0608,  lon: -107.9215 },
-  { name: 'Cosmic Campground',     state: 'New Mexico',     bortle: 1, lat: 33.4836,  lon: -108.9211 },
-  { name: 'Antelope Island SP',    state: 'Utah',           bortle: 3, lat: 41.0058,  lon: -112.2188 },
-  { name: 'Headlands DSP',         state: 'Michigan',       bortle: 2, lat: 45.7884,  lon: -84.7286 },
-  { name: 'Geauga Observatory Pk', state: 'Ohio',           bortle: 3, lat: 41.5601,  lon: -81.1698 },
-  { name: 'Salt Fork SP',          state: 'Ohio',           bortle: 3, lat: 40.0822,  lon: -81.4892 },
-  { name: 'Staunton River SP',     state: 'Virginia',       bortle: 2, lat: 36.6862,  lon: -78.6928 },
-  { name: 'Mayland Earth to Sky',  state: 'North Carolina', bortle: 2, lat: 36.0490,  lon: -82.1390 },
-  { name: 'Enchanted Rock SNA',    state: 'Texas',          bortle: 2, lat: 30.5061,  lon: -98.8198 },
-  { name: 'Copper Breaks SP',      state: 'Texas',          bortle: 2, lat: 34.1147,  lon: -99.7565 },
-  { name: 'Massacre Rim',          state: 'Nevada',         bortle: 1, lat: 41.6883,  lon: -119.6928 },
-  { name: 'Beaver Meadow Audubon', state: 'New York',       bortle: 3, lat: 42.7170,  lon: -78.4525 },
-  { name: 'Moab',                  state: 'Utah',           bortle: 2, lat: 38.5733,  lon: -109.5498 },
-
-  // International
-  { name: 'Aoraki Mackenzie',      state: 'New Zealand',    bortle: 1, lat: -43.9325, lon: 170.4651 },
-  { name: 'NamibRand Reserve',     state: 'Namibia',        bortle: 1, lat: -24.8333, lon: 16.0167 },
-  { name: 'Exmoor NP',             state: 'United Kingdom', bortle: 2, lat: 51.1352,  lon: -3.6483 },
-  { name: 'Brecon Beacons',        state: 'United Kingdom', bortle: 2, lat: 51.8843,  lon: -3.4360 },
-  { name: 'Westhavelland',         state: 'Germany',        bortle: 2, lat: 52.6167,  lon: 12.4167 },
-  { name: 'Warrumbungle NP',       state: 'Australia',      bortle: 1, lat: -31.2756, lon: 149.0046 },
-];
 
 function SearchIcon() {
   return (
@@ -102,6 +61,9 @@ interface SearchResult {
 export default function AddLocationScreen() {
   const insets = useSafeAreaInsets();
   const { addLocation, locations, activeLocIndex } = useLocations();
+  const { status } = useSubscription();
+  const isFree = status === 'free';
+  const hasLocation = locations.length > 0;
   const [query, setQuery] = useState('');
   const [gpsLoading, setGpsLoading] = useState(false);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -226,9 +188,7 @@ export default function AddLocationScreen() {
 
       const city = geo?.city ?? geo?.subregion ?? 'Current Location';
       const region = geo?.region ?? geo?.country ?? '';
-
-      // Estimate bortle from city — a real app would call a dark-sky API
-      const estimatedBortle = 4; // suburb assumption for GPS
+      const estimatedBortle = estimateBortle(pos.coords.latitude, pos.coords.longitude);
 
       const loc = mkLocFromPlace(city, region, estimatedBortle, pos.coords.latitude, pos.coords.longitude);
       addLocation(loc);
@@ -257,7 +217,7 @@ export default function AddLocationScreen() {
       Alert.alert('Already added', `${r.city} is already in your spots.`);
       return;
     }
-    const loc = mkLocFromPlace(r.city, r.region, 4, r.latitude, r.longitude);
+    const loc = mkLocFromPlace(r.city, r.region, estimateBortle(r.latitude, r.longitude), r.latitude, r.longitude);
     addLocation(loc);
     router.back();
   }
@@ -297,7 +257,7 @@ export default function AddLocationScreen() {
         {/* Use current location */}
         <TouchableOpacity
           style={styles.gpsRow}
-          onPress={handleUseLocation}
+          onPress={isFree && hasLocation ? () => router.push('/paywall') : handleUseLocation}
           activeOpacity={0.8}
           disabled={gpsLoading}
         >
@@ -314,6 +274,17 @@ export default function AddLocationScreen() {
           {!gpsLoading && <Text style={styles.gpsChev}>›</Text>}
         </TouchableOpacity>
 
+        {/* Free tier: upgrade banner for multiple spots */}
+        {isFree && hasLocation && (
+          <TouchableOpacity style={styles.upgradeBanner} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
+            <View style={styles.upgradeBannerMain}>
+              <Text style={styles.upgradeBannerTitle}>⭐ Unlock multiple spots</Text>
+              <Text style={styles.upgradeBannerSub}>Premium lets you save home, dark sites, and travel spots — switch between them instantly.</Text>
+            </View>
+            <Text style={styles.upgradeBannerCta}>Upgrade</Text>
+          </TouchableOpacity>
+        )}
+
         {showingSearch ? (
           <>
             <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
@@ -327,7 +298,7 @@ export default function AddLocationScreen() {
                       key={r.key}
                       style={[styles.placeRow, added && styles.placeRowAdded]}
                       activeOpacity={0.8}
-                      onPress={() => handleSearchResult(r)}
+                      onPress={() => isFree && hasLocation ? router.push('/paywall') : handleSearchResult(r)}
                     >
                       <View style={styles.moonIcon}>
                         <MoonIcon />
@@ -338,7 +309,7 @@ export default function AddLocationScreen() {
                           {r.region}{distMi !== null ? ` · ${formatMiles(distMi)}` : ''}
                         </Text>
                       </View>
-                      {added && <Text style={styles.placeAdded}>✓</Text>}
+                      {added && <CheckIcon size={16} color={ACCENT} strokeWidth={2.5} />}
                     </TouchableOpacity>
                   );
                 })
@@ -362,7 +333,7 @@ export default function AddLocationScreen() {
                     key={i}
                     style={[styles.placeRow, added && styles.placeRowAdded]}
                     activeOpacity={0.8}
-                    onPress={() => handleAddPlace(place)}
+                    onPress={() => isFree && hasLocation ? router.push('/paywall') : handleAddPlace(place)}
                   >
                     <View style={styles.moonIcon}>
                       <MoonIcon />
@@ -374,7 +345,7 @@ export default function AddLocationScreen() {
                       </Text>
                     </View>
                     {added
-                      ? <Text style={styles.placeAdded}>✓</Text>
+                      ? <CheckIcon size={16} color={ACCENT} strokeWidth={2.5} />
                       : <Text style={styles.placeBortle}>B{place.bortle}</Text>
                     }
                   </TouchableOpacity>
@@ -483,6 +454,39 @@ const styles = StyleSheet.create({
   },
   gpsChev: {
     fontSize: 20,
+    color: ACCENT,
+    flexShrink: 0,
+  },
+
+  upgradeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(126,240,210,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(126,240,210,0.25)',
+    marginBottom: 24,
+  },
+  upgradeBannerMain: { flex: 1, gap: 3 },
+  upgradeBannerTitle: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  upgradeBannerSub: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    lineHeight: 16,
+  },
+  upgradeBannerCta: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 13,
+    fontWeight: '600',
     color: ACCENT,
     flexShrink: 0,
   },

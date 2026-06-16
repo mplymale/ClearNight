@@ -1,8 +1,9 @@
 import React from 'react';
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
 import type { Location, DayForecast } from '../src/data/mockForecast';
@@ -10,16 +11,97 @@ import type { Location, DayForecast } from '../src/data/mockForecast';
 const SCREEN_H = Dimensions.get('window').height;
 const SHEET_H = Math.round(SCREEN_H * 0.54);
 
+// ── Bortle scale strip — class is fixed per location, so a 6-night bar
+// chart of identical bars is meaningless. Show where it falls on 1–9 instead.
+
+const BORTLE_STOPS: [number, string][] = [
+  [0,    '#0a2a3a'], // 1 — excellent dark site
+  [0.25, '#1f6e5c'], // 3 — rural
+  [0.5,  '#c9a227'], // 5 — suburban
+  [0.75, '#d96b2b'], // 7 — bright suburban/urban transition
+  [1,    '#c9342f'], // 9 — inner city
+];
+
+const BORTLE_CLASS_NAMES: Record<number, string> = {
+  1: 'Excellent dark site',
+  2: 'Typical dark site',
+  3: 'Rural sky',
+  4: 'Rural/suburban',
+  5: 'Suburban sky',
+  6: 'Bright suburban',
+  7: 'Suburban/urban',
+  8: 'City sky',
+  9: 'Inner-city sky',
+};
+
+function BortleScale({ bortle, accent }: { bortle: number; accent: string }) {
+  const BAR_H = 14;
+  const t = Math.max(0, Math.min(1, (bortle - 1) / 8));
+
+  return (
+    <View style={styles.bortleSection}>
+      <Text style={styles.barsLabel}>WHERE THIS FALLS ON THE SCALE</Text>
+
+      <View style={styles.bortleBarWrap}>
+        <Svg width="100%" height={BAR_H} viewBox="0 0 300 14">
+          <Defs>
+            <LinearGradient id="bortleGrad" x1="0" y1="0" x2="1" y2="0">
+              {BORTLE_STOPS.map(([offset, color], i) => (
+                <Stop key={i} offset={offset} stopColor={color} />
+              ))}
+            </LinearGradient>
+          </Defs>
+          <Rect x={0} y={0} width={300} height={14} rx={7} fill="url(#bortleGrad)" />
+        </Svg>
+
+        {/* Marker pinpointing this location's class */}
+        <View
+          style={[
+            styles.bortleMarker,
+            { left: `${t * 100}%` },
+          ]}
+        >
+          <View style={[styles.bortleMarkerDot, { borderColor: accent }]} />
+        </View>
+      </View>
+
+      <View style={styles.bortleEndLabels}>
+        <Text style={styles.bortleEndLabel}>1 · Darkest</Text>
+        <Text style={styles.bortleEndLabel}>9 · Brightest</Text>
+      </View>
+
+      {/* Full 1–9 legend with this location's class highlighted —
+          scrollable as a safety net on shorter screens */}
+      <ScrollView style={styles.bortleLegend} showsVerticalScrollIndicator={false}>
+        {Array.from({ length: 9 }, (_, i) => i + 1).map((cls) => {
+          const isSelected = cls === bortle;
+          return (
+            <View key={cls} style={styles.bortleLegendRow}>
+              <Text style={[styles.bortleLegendNum, isSelected && { color: accent }]}>{cls}</Text>
+              <Text style={[styles.bortleLegendName, isSelected && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
+                {BORTLE_CLASS_NAMES[cls]}
+              </Text>
+              {isSelected && <Text style={[styles.bortleLegendHere, { color: accent }]}>this spot</Text>}
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 // ── 6-night bar chart ─────────────────────────────────────────────────────────
 
 function NightBars({
   days,
   getValue,
   accent,
+  selectedIndex,
 }: {
   days: DayForecast[];
   getValue: (d: DayForecast) => number; // 0–1 normalized
   accent: string;
+  selectedIndex: number;
 }) {
   const labels = days.map((d, i) => (i === 0 ? 'Now' : d.day));
   const BAR_MAX_H = 120;
@@ -31,7 +113,7 @@ function NightBars({
         {days.map((d, i) => {
           const pct = Math.max(0.04, getValue(d));
           const h = pct * BAR_MAX_H;
-          const isNow = i === 0;
+          const isSelected = i === selectedIndex;
           return (
             <View key={i} style={styles.barCol}>
               <View style={styles.barTrack}>
@@ -40,12 +122,12 @@ function NightBars({
                     styles.bar,
                     {
                       height: h,
-                      backgroundColor: isNow ? accent : 'rgba(255,255,255,0.12)',
+                      backgroundColor: isSelected ? accent : 'rgba(255,255,255,0.12)',
                     },
                   ]}
                 />
               </View>
-              <Text style={[styles.barDay, isNow && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
+              <Text style={[styles.barDay, isSelected && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
                 {labels[i]}
               </Text>
             </View>
@@ -146,7 +228,8 @@ export default function FactorDetailScreen() {
 
   const { locations } = useLocations();
   const loc = locations[Number(locIndex ?? 0)];
-  const day = loc.days[Number(dayIndex ?? 0)];
+  const selectedDayIndex = Number(dayIndex ?? 0);
+  const day = loc.days[selectedDayIndex];
   const accent = VERDICTS[day.verdict].accent;
 
   const { title, valueLine, description, getValue } = getContent(factor, loc, day, accent);
@@ -172,8 +255,14 @@ export default function FactorDetailScreen() {
         {/* Description */}
         <Text style={styles.description}>{description}</Text>
 
-        {/* 6-night bars */}
-        <NightBars days={loc.days} getValue={getValue} accent={accent} />
+        {/* Bortle is fixed per location — show where it falls on the 1–9
+            scale instead of a 6-night bar chart of identical bars. Every
+            other factor genuinely varies night to night, so keep those. */}
+        {factor === 'bortle' ? (
+          <BortleScale bortle={day.bortle} accent={accent} />
+        ) : (
+          <NightBars days={loc.days} getValue={getValue} accent={accent} selectedIndex={selectedDayIndex} />
+        )}
       </View>
     </View>
   );
@@ -248,6 +337,67 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
 
+  bortleSection: {
+    flex: 1,
+  },
+  bortleBarWrap: {
+    position: 'relative',
+    marginBottom: 10,
+    paddingHorizontal: 2,
+  },
+  bortleMarker: {
+    position: 'absolute',
+    top: -3,
+    marginLeft: -10,
+    width: 20,
+    alignItems: 'center',
+  },
+  bortleMarkerDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0e1420',
+    borderWidth: 3,
+  },
+  bortleEndLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  bortleEndLabel: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+  },
+  bortleLegend: {
+    flex: 1,
+  },
+  bortleLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    gap: 10,
+  },
+  bortleLegendNum: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+    width: 16,
+  },
+  bortleLegendName: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.55)',
+    flex: 1,
+  },
+  bortleLegendHere: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
   barsSection: {
     flex: 1,
   },

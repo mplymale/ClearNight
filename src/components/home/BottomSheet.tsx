@@ -15,6 +15,7 @@ import Svg, { Path } from 'react-native-svg';
 import { DayForecast, Location } from '../../data/mockForecast';
 import { Verdict } from '../../constants/verdicts';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD } from '../../context/NightVisionContext';
+import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
 
 // Single consistent chevron shape — rotated for open/closed instead of
 // swapping Unicode glyphs (⌃/⌄ render at different sizes in-font).
@@ -83,6 +84,8 @@ interface Props {
 
 export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
   const { nightVision } = useNightVision();
+  const { use24h } = usePreferences();
+  const fmt = (s: string) => applyTimeFormat(s, use24h);
   const accent = nightVision ? NV_ACCENT : v.accent;
   const sheetBg = nightVision ? '#140200' : '#0a0c14';
   const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.10)';
@@ -239,15 +242,38 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
             {day.window && (
               <View style={styles.winNote}>
                 <View style={[styles.winDash, { backgroundColor: accent }]} />
-                <Text style={styles.winText}>Best window · {day.window.label}</Text>
+                <Text style={styles.winText}>Best window · {fmt(day.window.label)}</Text>
               </View>
             )}
 
             {/* ── Visible tonight ── */}
             <View style={styles.visSectionHead}>
               <Text style={styles.sectionLabel}>Visible Tonight</Text>
-              <Text style={styles.visSeeAll}>{loc.objects.length} up · see all ›</Text>
+              <Text style={styles.visSeeAll}>
+                {loc.objects.length + (loc.prime.peakAlt > 0 ? 1 : 0)} up · see all ›
+              </Text>
             </View>
+
+            {/* Prime target — the flagship pick (often the galactic core),
+                tracked separately from loc.objects but just as "visible
+                tonight" as anything else, so it belongs in this list too. */}
+            {loc.prime.peakAlt > 0 && (
+              <TouchableOpacity
+                style={[styles.objCard, { borderColor: cardBorder, backgroundColor: cardBg }]}
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
+              >
+                <View style={styles.objMain}>
+                  <Text style={styles.objName}>{loc.prime.name}</Text>
+                  <Text style={styles.objId}>{loc.prime.sub}</Text>
+                  <Text style={styles.objStats}>Visible {fmt(loc.prime.visible)}</Text>
+                </View>
+                <View style={styles.objRight}>
+                  <Text style={[styles.objQuality, { color: accent }]}>PRIME</Text>
+                  <Text style={styles.objChev}>›</Text>
+                </View>
+              </TouchableOpacity>
+            )}
 
             {loc.objects.map((obj, i) => (
               <TouchableOpacity

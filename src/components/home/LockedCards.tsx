@@ -8,18 +8,9 @@ import { Verdict } from '../../constants/verdicts';
 function IcWeek() {
   return (
     <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
-      <Rect x={2}   y={9} width={3} height={6} rx={1} fill="currentColor" />
-      <Rect x={7.5} y={5} width={3} height={10} rx={1} fill="currentColor" />
-      <Rect x={13}  y={7} width={3} height={8}  rx={1} fill="currentColor" />
-    </Svg>
-  );
-}
-
-function IcTarget() {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
-      <Circle cx={9} cy={9} r={7} stroke="currentColor" strokeWidth={1.6} />
-      <Circle cx={9} cy={9} r={2.4} fill="currentColor" />
+      <Rect x={2}   y={9} width={3} height={6} rx={1} fill="#fff" />
+      <Rect x={7.5} y={5} width={3} height={10} rx={1} fill="#fff" />
+      <Rect x={13}  y={7} width={3} height={8}  rx={1} fill="#fff" />
     </Svg>
   );
 }
@@ -27,8 +18,8 @@ function IcTarget() {
 function IcAlert() {
   return (
     <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
-      <Circle cx={9} cy={9} r={3} fill="currentColor" />
-      <Circle cx={9} cy={9} r={7} stroke="currentColor" strokeWidth={1.4} opacity={0.55} />
+      <Circle cx={9} cy={9} r={3} fill="#fff" />
+      <Circle cx={9} cy={9} r={7} stroke="#fff" strokeWidth={1.4} opacity={0.55} />
     </Svg>
   );
 }
@@ -87,22 +78,7 @@ export function LockedCards({ verdict: v, weekScores, onUpgrade }: Props) {
         <WeekPreview scores={weekScores} accent={v.accent} />
       </TouchableOpacity>
 
-      {/* Card 2 — Targets & timing */}
-      <TouchableOpacity style={styles.card} onPress={onUpgrade} activeOpacity={0.75}>
-        <View style={styles.cardIcon}>
-          <IcTarget />
-        </View>
-        <View style={styles.cardMain}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle}>Targets & timing</Text>
-            <PremiumPill accent={v.accent} />
-          </View>
-          <Text style={styles.cardSub}>Prime target, best window & hour-by-hour</Text>
-        </View>
-        <Text style={styles.cardChev}>›</Text>
-      </TouchableOpacity>
-
-      {/* Card 3 — Never miss a GO (accent) */}
+      {/* Card 2 — Never miss a GO (accent) */}
       <View style={[styles.card, styles.cardAccent, { backgroundColor: v.accentSoft, borderColor: v.accent }]}>
         <View style={[styles.cardIcon, styles.cardIconAccent]}>
           <IcAlert />
@@ -116,7 +92,7 @@ export function LockedCards({ verdict: v, weekScores, onUpgrade }: Props) {
           onPress={onUpgrade}
           activeOpacity={0.8}
         >
-          <Text style={styles.ctaBtnText}>Turn on</Text>
+          <Text style={styles.ctaBtnText}>Upgrade</Text>
         </TouchableOpacity>
       </View>
     </View>

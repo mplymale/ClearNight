@@ -10,20 +10,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useSubscription } from '../src/context/SubscriptionContext';
+import { AppLogo } from '../src/components/common/AppLogo';
+import { CheckIcon } from '../src/components/common/CheckIcon';
 
 const ACCENT = '#7ef0d2';
 const ACCENT_SOFT = 'rgba(126,240,210,0.15)';
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-function ForecastMark({ size = 56 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 56 56" fill="none">
-      <Path d="M28 8 C28 8 32 22 44 28 C32 28 32 48 28 50 C28 50 24 34 12 28 C24 28 24 12 28 8Z" fill={ACCENT} />
-      <Path d="M28 8 C28 8 32 22 44 28" stroke={ACCENT} strokeWidth="1.5" strokeOpacity={0.4} fill="none" />
-    </Svg>
-  );
-}
 
 function IcWeek() {
   return (
@@ -101,7 +96,7 @@ function SuccessView() {
     <LinearGradient colors={['#04060e', '#061510', '#081f18']} style={styles.container}>
       <View style={[styles.successWrap, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
         <View style={styles.successMark}>
-          <Text style={styles.successCheck}>✓</Text>
+          <CheckIcon size={28} color="#04130f" strokeWidth={2.5} />
         </View>
         <Text style={styles.successTitle}>You're all set</Text>
         <Text style={styles.successBody}>
@@ -119,6 +114,7 @@ function SuccessView() {
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
+  const { setStatus } = useSubscription();
   const [plan, setPlan] = useState<'annual' | 'monthly' | 'lifetime'>('annual');
   const [done, setDone] = useState(false);
 
@@ -149,7 +145,7 @@ export default function PaywallScreen() {
       >
         {/* Hero */}
         <View style={styles.hero}>
-          <ForecastMark size={72} />
+          <AppLogo size={90} />
           <Text style={styles.kicker}>StarCast Premium</Text>
           <Text style={styles.heroTitle}>Never miss a clear night</Text>
           <Text style={styles.heroSub}>
@@ -182,7 +178,7 @@ export default function PaywallScreen() {
               >
                 {/* Radio */}
                 <View style={[styles.radio, on && { borderColor: ACCENT, backgroundColor: ACCENT }]}>
-                  {on && <Text style={styles.radioCheck}>✓</Text>}
+                  {on && <CheckIcon size={11} color="#04130f" strokeWidth={2.8} />}
                 </View>
 
                 {/* Name + note */}
@@ -214,7 +210,12 @@ export default function PaywallScreen() {
         {/* CTA */}
         <TouchableOpacity
           style={styles.ctaBtn}
-          onPress={() => setDone(true)}
+          onPress={() => {
+            // Checkout "succeeded" — stop showing the trial nag everywhere
+            // else in the app from this point on.
+            setStatus('subscribed');
+            setDone(true);
+          }}
           activeOpacity={0.85}
         >
           <Text style={styles.ctaBtnText}>{ctaLabel}</Text>

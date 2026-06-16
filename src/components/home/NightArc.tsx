@@ -4,6 +4,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 import { Verdict } from '../../constants/verdicts';
 import { DayForecast, Location } from '../../data/mockForecast';
 import { useNightVision, NV_ACCENT } from '../../context/NightVisionContext';
+import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
 
 // Arc geometry — matches prototype exactly
 const ARC = { cx: 160, cy: 120, r: 108 };
@@ -32,6 +33,8 @@ interface Props {
 
 export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
   const { nightVision } = useNightVision();
+  const { use24h } = usePreferences();
+  const fmt = (s: string) => applyTimeFormat(s, use24h);
   const accent = nightVision ? NV_ACCENT : v.accent;
   const hasWin = !freeMode && !!day.window;
   const winEndpoints = hasWin && day.window
@@ -93,13 +96,13 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
 
       {/* Dusk label — bottom left */}
       <View style={[styles.arcEnd, styles.arcEndLeft]}>
-        <Text style={styles.arcEndTime}>{loc.dusk}</Text>
+        <Text style={styles.arcEndTime}>{fmt(loc.dusk)}</Text>
         <Text style={styles.arcEndLabel}>dusk</Text>
       </View>
 
       {/* Dawn label — bottom right */}
       <View style={[styles.arcEnd, styles.arcEndRight]}>
-        <Text style={[styles.arcEndTime, { textAlign: 'right' }]}>{loc.dawn}</Text>
+        <Text style={[styles.arcEndTime, { textAlign: 'right' }]}>{fmt(loc.dawn)}</Text>
         <Text style={[styles.arcEndLabel, { textAlign: 'right' }]}>dawn</Text>
       </View>
 
@@ -120,9 +123,9 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
             <Text style={[styles.arcCap, { color: 'rgba(255,255,255,0.65)' }]}>
               {v.label} · BEST WINDOW
             </Text>
-            <Text style={styles.arcWinTime}>{day.window.label}</Text>
+            <Text style={styles.arcWinTime}>{fmt(day.window.label)}</Text>
             <Text style={styles.arcSub}>
-              {day.primeDark} of prime darkness · clear by {day.clearBy}
+              {day.primeDark} of prime darkness · clear by {fmt(day.clearBy)}
             </Text>
           </>
         ) : (
