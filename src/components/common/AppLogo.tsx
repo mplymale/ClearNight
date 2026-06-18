@@ -1,88 +1,152 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import { Animated, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Path, Polygon } from 'react-native-svg';
 
 const ACCENT = '#7ef0d2';
+const ACCENT_HI = '#bdf8e7';
+const STAR_FILL = '#eafff9';
+const HALO = '126,240,210';
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-function sparklePath(cx: number, cy: number, r: number, k = r * 0.26): string {
-  return `M ${cx} ${cy - r}
-    C ${cx + k} ${cy - k}, ${cx + k} ${cy - k}, ${cx + r} ${cy}
-    C ${cx + k} ${cy + k}, ${cx + k} ${cy + k}, ${cx} ${cy + r}
-    C ${cx - k} ${cy + k}, ${cx - k} ${cy + k}, ${cx - r} ${cy}
-    C ${cx - k} ${cy - k}, ${cx - k} ${cy - k}, ${cx} ${cy - r} Z`;
+function fmSmooth(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+  }
+  return d;
 }
 
-const CORE_X = 58;
-const CORE_Y = 54;
-const LINE_START = { x: 67, y: 49, r: 3.2 };
-const LINE_END = { x: 89, y: 38, r: 4 };
-const TRAIL_LENGTH = 30;
-const TAIL_LARGE_R = [3.4, 2.7, 2.2, 1.7, 1.3, 1.0];
-const TAIL_SMALL_R = [2.0, 1.6, 1.3, 1.0, 0.7];
-const TAIL_START = { x: 50, y: 60 };
-const TAIL_END = { x: 11, y: 87 };
-const TAIL_POINTS = Array.from({ length: 11 }, (_, i) => {
-  const t = i / 10;
-  return {
-    x: TAIL_START.x + (TAIL_END.x - TAIL_START.x) * t,
-    y: TAIL_START.y + (TAIL_END.y - TAIL_START.y) * t,
-    r: i % 2 === 0 ? TAIL_LARGE_R[i / 2] : TAIL_SMALL_R[(i - 1) / 2],
-    opacity: 0.9 - 0.4 * t,
-  };
-});
+function sparklePts(cx: number, cy: number, r: number, inner = r * 0.18): string {
+  const i = inner;
+  return [
+    [cx, cy - r], [cx + i, cy - i], [cx + r, cy], [cx + i, cy + i],
+    [cx, cy + r], [cx - i, cy + i], [cx - r, cy], [cx - i, cy - i],
+  ].map((p) => p.join(',')).join(' ');
+}
+
+const CURVE_PTS = [
+  { x: 12, y: 80 }, { x: 36, y: 64 }, { x: 60, y: 53 },
+  { x: 86, y: 47 }, { x: 110, y: 45 },
+];
+const NOW_IDX = 2;
+const PAST_PATH = fmSmooth(CURVE_PTS.slice(0, NOW_IDX + 1));
+const FUTURE_PATH = fmSmooth(CURVE_PTS.slice(NOW_IDX));
+const NOW = CURVE_PTS[NOW_IDX];
+
+const FIELD = [
+  { x: 22, y: 26, r: 1.1, a: 0.8, spark: true },
+  { x: 46, y: 18, r: 0.8, a: 0.5, spark: false },
+  { x: 84, y: 20, r: 1.0, a: 0.7, spark: true },
+  { x: 102, y: 52, r: 0.8, a: 0.55, spark: false },
+  { x: 16, y: 56, r: 0.8, a: 0.5, spark: false },
+  { x: 68, y: 30, r: 0.8, a: 0.55, spark: false },
+  { x: 36, y: 44, r: 0.6, a: 0.4, spark: false },
+];
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export function AppLogo({ size = 80, animate = true }: { size?: number; animate?: boolean }) {
-  const coreScale = useRef(new Animated.Value(animate ? 0.5 : 1)).current;
-  const coreOpacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
-  const lineDraw = useRef(new Animated.Value(animate ? TRAIL_LENGTH : 0)).current;
-  const dotOpacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  // non-native: line draw via strokeDashoffset (150 > any path length in 120×120 viewBox)
+  const lineDraw = useRef(new Animated.Value(animate ? 150 : 0)).current;
+  const nodesOpacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  // native: now star pop
+  const nowOpacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  const nowScale = useRef(new Animated.Value(animate ? 0.3 : 1)).current;
 
   useEffect(() => {
     if (!animate) return;
     Animated.sequence([
+      // 1. draw the line
+      Animated.timing(lineDraw, { toValue: 0, duration: 850, useNativeDriver: false }),
+      // 2. fade in nodes
+      Animated.timing(nodesOpacity, { toValue: 1, duration: 200, useNativeDriver: false }),
+    ]).start(() => {
+      // 3. pop in now star (native driver, starts after draw finishes)
       Animated.parallel([
-        Animated.spring(coreScale, { toValue: 1, useNativeDriver: true, tension: 50, friction: 7 }),
-        Animated.timing(coreOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-      Animated.timing(lineDraw, { toValue: 0, duration: 750, useNativeDriver: false }),
-      Animated.timing(dotOpacity, { toValue: 1, duration: 350, useNativeDriver: false }),
-    ]).start();
+        Animated.spring(nowScale, { toValue: 1, useNativeDriver: true, tension: 60, friction: 7 }),
+        Animated.timing(nowOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+      ]).start();
+    });
   }, []);
 
   return (
-    <Animated.View style={{ transform: [{ scale: coreScale }], opacity: coreOpacity }}>
-      <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-        <Circle cx={14} cy={20} r={0.9} fill="#fff" opacity={0.55} />
-        <Circle cx={30} cy={8} r={0.7} fill="#fff" opacity={0.4} />
-        <Circle cx={6} cy={48} r={0.8} fill="#fff" opacity={0.45} />
-        <Circle cx={78} cy={16} r={1.3} fill="#8fd0ff" opacity={0.6} />
-        <Circle cx={92} cy={64} r={1.1} fill="#ffce8f" opacity={0.55} />
-        <Path d={sparklePath(20, 30, 3.2)} fill="#fff" opacity={0.55} />
-        <Path d={sparklePath(36, 14, 2.1)} fill="#fff" opacity={0.5} />
-        <Path d={sparklePath(11, 60, 2.4)} fill="#fff" opacity={0.42} />
-        <Path d={sparklePath(60, 8, 2.6)} fill="#fff" opacity={0.5} />
-        <Circle cx={CORE_X} cy={CORE_Y} r={21} fill="rgba(126,240,210,0.12)" />
-        <Circle cx={CORE_X} cy={CORE_Y} r={14} fill="rgba(126,240,210,0.22)" />
-        {TAIL_POINTS.map((p, i) => (
-          <Circle key={i} cx={p.x} cy={p.y} r={p.r} fill={ACCENT} opacity={p.opacity} />
-        ))}
-        <Circle cx={LINE_START.x} cy={LINE_START.y} r={LINE_START.r} fill={ACCENT} opacity={0.8} />
-        <AnimatedPath
-          d={`M ${LINE_START.x} ${LINE_START.y} Q 78 44 ${LINE_END.x} ${LINE_END.y}`}
-          stroke={ACCENT}
-          strokeWidth={3}
+    <View style={{ width: size, height: size }}>
+      {/* Layer 1 — star field + past trail */}
+      <Svg width={size} height={size} viewBox="0 0 120 120" fill="none" style={StyleSheet.absoluteFill}>
+        {FIELD.map((f, i) =>
+          f.spark ? (
+            <Polygon
+              key={i}
+              points={sparklePts(f.x, f.y, f.r + 0.6, (f.r + 0.6) * 0.34)}
+              fill={i === 2 ? ACCENT_HI : '#fff'}
+              opacity={f.a}
+            />
+          ) : (
+            <Circle key={i} cx={f.x} cy={f.y} r={f.r} fill="#fff" opacity={f.a} />
+          )
+        )}
+        <Path
+          d={PAST_PATH}
+          stroke={`rgba(${HALO},0.55)`}
+          strokeWidth={2.2}
+          strokeDasharray="0.12 5.4"
           strokeLinecap="round"
-          strokeDasharray={[TRAIL_LENGTH, TRAIL_LENGTH]}
+        />
+      </Svg>
+
+      {/* Layer 2 — future line draws in, then nodes fade in */}
+      <Svg width={size} height={size} viewBox="0 0 120 120" fill="none" style={StyleSheet.absoluteFill}>
+        {/* glow always follows the line */}
+        <AnimatedPath
+          d={FUTURE_PATH}
+          stroke={`rgba(${HALO},0.18)`}
+          strokeWidth={6.5}
+          strokeLinecap="round"
+          strokeDasharray={[150, 150]}
           strokeDashoffset={lineDraw}
         />
-        <AnimatedCircle cx={LINE_END.x} cy={LINE_END.y} r={LINE_END.r} fill={ACCENT} opacity={dotOpacity} />
-        <AnimatedCircle cx={LINE_END.x - 1.7} cy={LINE_END.y - 1.8} r={1.3} fill="#fff" opacity={dotOpacity} />
-        <Circle cx={CORE_X} cy={CORE_Y} r={8} fill="rgba(126,240,210,0.55)" />
-        <Path d={sparklePath(CORE_X, CORE_Y, 9)} fill="#ffffff" />
+        <AnimatedPath
+          d={FUTURE_PATH}
+          stroke={ACCENT}
+          strokeWidth={2.4}
+          strokeLinecap="round"
+          strokeDasharray={[150, 150]}
+          strokeDashoffset={lineDraw}
+        />
+        {CURVE_PTS.map((p, i) =>
+          i > NOW_IDX ? (
+            <AnimatedPath
+              key={i}
+              d={`M ${p.x - 2.7} ${p.y} a 2.7 2.7 0 1 0 5.4 0 a 2.7 2.7 0 1 0 -5.4 0`}
+              fill={ACCENT}
+              opacity={nodesOpacity}
+            />
+          ) : null
+        )}
       </Svg>
-    </Animated.View>
+
+      {/* Layer 3 — now star pops in last */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { opacity: nowOpacity, transform: [{ scale: nowScale }] },
+        ]}
+      >
+        <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
+          <Circle cx={NOW.x} cy={NOW.y} r={16.5} fill={`rgba(${HALO},0.16)`} />
+          <Circle cx={NOW.x} cy={NOW.y} r={11} fill={`rgba(${HALO},0.26)`} />
+          <Circle cx={NOW.x} cy={NOW.y} r={6.5} fill={`rgba(${HALO},0.4)`} />
+          <Polygon points={sparklePts(NOW.x, NOW.y, 9.6)} fill={STAR_FILL} />
+        </Svg>
+      </Animated.View>
+    </View>
   );
 }

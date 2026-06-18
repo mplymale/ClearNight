@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = 'starcast:favorites';
+const STORAGE_KEY = 'clearnight:favorites';
 
 interface FavoritesCtx {
   favorites: Set<string>;

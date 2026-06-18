@@ -26,6 +26,7 @@ import { estimateBortle } from '../src/services/bortleEstimate';
 import { getNightBounds } from '../src/services/moon';
 import { computeTonightsSky } from '../src/services/skyObjects';
 import { CheckIcon } from '../src/components/common/CheckIcon';
+import { AppLogo } from '../src/components/common/AppLogo';
 
 const ACCENT = '#7ef0d2';
 const ACCENT_SOFT = 'rgba(126,240,210,0.14)';
@@ -88,111 +89,6 @@ function FadeInUp({
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-// 4-pointed sparkle/twinkle shape, centered at (cx, cy) with point radius r.
-// Lower k = thinner, sharper points (less "chunky").
-function sparklePath(cx: number, cy: number, r: number, k = r * 0.26): string {
-  return `M ${cx} ${cy - r}
-    C ${cx + k} ${cy - k}, ${cx + k} ${cy - k}, ${cx + r} ${cy}
-    C ${cx + k} ${cy + k}, ${cx + k} ${cy + k}, ${cx} ${cy + r}
-    C ${cx - k} ${cy + k}, ${cx - k} ${cy + k}, ${cx - r} ${cy}
-    C ${cx - k} ${cy - k}, ${cx - k} ${cy - k}, ${cx} ${cy - r} Z`;
-}
-
-const CORE_X = 58;
-const CORE_Y = 54;
-
-// Trail line spans between two larger circles (base orb → tip orb)
-const LINE_START = { x: 67, y: 49, r: 3.2 };
-const LINE_END = { x: 89, y: 38, r: 4 };
-
-// Approx length of the shooting-star trail path, for the dash-draw effect
-const TRAIL_LENGTH = 30;
-
-// Comet tail — alternating larger/smaller beads (6 larger, 5 smaller).
-// Largest bead sits nearest the core; they shrink trailing away from it.
-const TAIL_LARGE_R = [3.4, 2.7, 2.2, 1.7, 1.3, 1.0];
-const TAIL_SMALL_R = [2.0, 1.6, 1.3, 1.0, 0.7];
-const TAIL_START = { x: 50, y: 60 };
-const TAIL_END = { x: 11, y: 87 };
-const TAIL_POINTS = Array.from({ length: 11 }, (_, i) => {
-  const t = i / 10;
-  return {
-    x: TAIL_START.x + (TAIL_END.x - TAIL_START.x) * t,
-    y: TAIL_START.y + (TAIL_END.y - TAIL_START.y) * t,
-    r: i % 2 === 0 ? TAIL_LARGE_R[i / 2] : TAIL_SMALL_R[(i - 1) / 2],
-    opacity: 0.9 - 0.4 * t,
-  };
-});
-
-// Real app logo — twinkling sparkle core with glow halo, a comet trail of
-// dots, and a bright tip. Animates in last: the core appears, the trail
-// line draws out, then the tip dot fades in.
-function ForecastMark({ size = 80, startDelay = 0 }: { size?: number; startDelay?: number }) {
-  const coreScale = useRef(new Animated.Value(0.5)).current;
-  const coreOpacity = useRef(new Animated.Value(0)).current;
-  const lineDraw = useRef(new Animated.Value(TRAIL_LENGTH)).current;
-  const dotOpacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.sequence([
-      Animated.delay(startDelay),
-      Animated.parallel([
-        Animated.spring(coreScale, { toValue: 1, useNativeDriver: true, tension: 50, friction: 7 }),
-        Animated.timing(coreOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ]),
-      Animated.timing(lineDraw, { toValue: 0, duration: 750, useNativeDriver: false }),
-      Animated.timing(dotOpacity, { toValue: 1, duration: 350, useNativeDriver: false }),
-    ]).start();
-  }, []);
-
-  return (
-    <Animated.View style={{ transform: [{ scale: coreScale }], opacity: coreOpacity }}>
-      <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-        {/* Scattered background dust — tiny dots */}
-        <Circle cx={14} cy={20} r={0.9} fill="#fff" opacity={0.55} />
-        <Circle cx={30} cy={8} r={0.7} fill="#fff" opacity={0.4} />
-        <Circle cx={6} cy={48} r={0.8} fill="#fff" opacity={0.45} />
-        <Circle cx={78} cy={16} r={1.3} fill="#8fd0ff" opacity={0.6} />
-        <Circle cx={92} cy={64} r={1.1} fill="#ffce8f" opacity={0.55} />
-
-        {/* Scattered background sparkles — small twinkle accents */}
-        <Path d={sparklePath(20, 30, 3.2)} fill="#fff" opacity={0.55} />
-        <Path d={sparklePath(36, 14, 2.1)} fill="#fff" opacity={0.5} />
-        <Path d={sparklePath(11, 60, 2.4)} fill="#fff" opacity={0.42} />
-        <Path d={sparklePath(60, 8, 2.6)} fill="#fff" opacity={0.5} />
-
-        {/* Glow halo — sits behind the tail/line so it doesn't wash out nearby beads */}
-        <Circle cx={CORE_X} cy={CORE_Y} r={21} fill="rgba(126,240,210,0.12)" />
-        <Circle cx={CORE_X} cy={CORE_Y} r={14} fill="rgba(126,240,210,0.22)" />
-
-        {/* Comet tail — alternating larger/smaller beads, shrinking toward the core */}
-        {TAIL_POINTS.map((p, i) => (
-          <Circle key={i} cx={p.x} cy={p.y} r={p.r} fill={ACCENT} opacity={p.opacity} />
-        ))}
-
-        {/* Solid trail — spans two larger circles, draws on mount */}
-        <Circle cx={LINE_START.x} cy={LINE_START.y} r={LINE_START.r} fill={ACCENT} opacity={0.8} />
-        <AnimatedPath
-          d={`M ${LINE_START.x} ${LINE_START.y} Q 78 44 ${LINE_END.x} ${LINE_END.y}`}
-          stroke={ACCENT}
-          strokeWidth={3}
-          strokeLinecap="round"
-          strokeDasharray={[TRAIL_LENGTH, TRAIL_LENGTH]}
-          strokeDashoffset={lineDraw}
-        />
-        <AnimatedCircle cx={LINE_END.x} cy={LINE_END.y} r={LINE_END.r} fill={ACCENT} opacity={dotOpacity} />
-        <AnimatedCircle cx={LINE_END.x - 1.7} cy={LINE_END.y - 1.8} r={1.3} fill="#fff" opacity={dotOpacity} />
-
-        {/* Bright inner halo (mint) + white core sparkle — gives the star contrast */}
-        <Circle cx={CORE_X} cy={CORE_Y} r={8} fill="rgba(126,240,210,0.55)" />
-        <Path d={sparklePath(CORE_X, CORE_Y, 9)} fill="#ffffff" />
-      </Svg>
-    </Animated.View>
-  );
-}
 
 function SearchIcon() {
   return (
@@ -257,10 +153,10 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
         {/* Top: brand + copy */}
         <View style={styles.obTop}>
           <View style={styles.brand}>
-            <ForecastMark size={90} startDelay={1300} />
+            <AppLogo size={90} animate />
             <FadeInUp delay={500}>
               <Text style={styles.brandWord}>
-                Star<Text style={styles.brandWordFaded}>Cast</Text>
+                Clear<Text style={styles.brandWordFaded}>Night</Text>
               </Text>
             </FadeInUp>
           </View>

@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 
 export default function ManageLocationsScreen() {
   const insets = useSafeAreaInsets();
   const { locations, removeLocation, setActiveLocIndex } = useLocations();
-  const [editing, setEditing] = useState(false);
+  const { nightVision } = useNightVision();
+  const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
+  const containerBg = nightVision ? '#150400' : '#080b12';
+  const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
+  const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.09)';
+  const addCardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.09)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.5)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.35)';
 
   function handleRemove(i: number) {
     const name = locations[i].name;
@@ -17,44 +26,27 @@ export default function ManageLocationsScreen() {
       `Remove ${name} from your spots?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            removeLocation(i);
-            if (locations.length <= 1) setEditing(false);
-          },
-        },
+        { text: 'Remove', style: 'destructive', onPress: () => removeLocation(i) },
       ],
     );
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: containerBg }]}>
       {/* Nav */}
       <View style={styles.nav}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={styles.backChev}>‹</Text>
-          <Text style={styles.backLabel}>Home</Text>
+          <Text style={[styles.backChev, { color: nvAccent }]}>‹</Text>
+          <Text style={[styles.backLabel, { color: nvAccent }]}>Home</Text>
         </TouchableOpacity>
-        <Text style={styles.navTitle}>My Spots</Text>
+        <Text style={[styles.navTitle, { color: textPrimary }]}>My Spots</Text>
         <TouchableOpacity
           style={styles.navRight}
-          onPress={() => {
-            if (editing) {
-              setEditing(false);
-            } else if (locations.length > 0) {
-              setEditing(true);
-            } else {
-              router.push('/add-location');
-            }
-          }}
+          onPress={() => router.back()}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Text style={[styles.editBtnText, editing && styles.editBtnDone]}>
-            {editing ? 'Done' : 'Edit'}
-          </Text>
+          <Text style={[styles.doneBtn, { color: nvAccent }]}>Done</Text>
         </TouchableOpacity>
       </View>
 
@@ -65,61 +57,52 @@ export default function ManageLocationsScreen() {
         {locations.map((loc, i) => {
           const day = loc.days[0];
           const v = VERDICTS[day.verdict];
-          const accent = v.accent;
+          const accent = nightVision ? NV_ACCENT : v.accent;
           const label = `${v.label.toUpperCase()} · ${v.word.toUpperCase()}`;
 
           return (
-            <View key={`${loc.name}-${i}`} style={styles.cardRow}>
-              {/* Remove button — shown in edit mode */}
-              {editing && (
-                <TouchableOpacity
-                  style={styles.removeBtn}
-                  onPress={() => handleRemove(i)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.removeBtnText}>−</Text>
-                </TouchableOpacity>
-              )}
+            <TouchableOpacity
+              key={`${loc.name}-${i}`}
+              style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}
+              activeOpacity={0.8}
+              onPress={() => {
+                setActiveLocIndex(i);
+                router.back();
+              }}
+            >
+              {/* Score badge */}
+              <View style={[styles.badge, { borderColor: accent }]}>
+                <Text style={[styles.badgeScore, { color: accent }]}>{day.score}</Text>
+              </View>
 
+              {/* Info */}
+              <View style={styles.cardMain}>
+                <Text style={[styles.cardName, { color: textPrimary }]}>{loc.name}</Text>
+                <Text style={[styles.cardMeta, { color: textDim }]}>Bortle {loc.bortle} · {loc.region}</Text>
+                <Text style={[styles.cardVerdict, { color: accent }]}>{label}</Text>
+              </View>
+
+              {/* X remove button */}
               <TouchableOpacity
-                style={[styles.card, editing && styles.cardEditing]}
-                activeOpacity={editing ? 1 : 0.8}
-                onPress={() => {
-                  if (!editing) {
-                    setActiveLocIndex(i);
-                    router.back();
-                  }
-                }}
+                style={styles.removeBtn}
+                onPress={() => handleRemove(i)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                {/* Score badge */}
-                <View style={[styles.badge, { borderColor: accent }]}>
-                  <Text style={[styles.badgeScore, { color: accent }]}>{day.score}</Text>
-                </View>
-
-                {/* Info */}
-                <View style={styles.cardMain}>
-                  <Text style={styles.cardName}>{loc.name}</Text>
-                  <Text style={styles.cardMeta}>Bortle {loc.bortle} · {loc.region}</Text>
-                  <Text style={[styles.cardVerdict, { color: accent }]}>{label}</Text>
-                </View>
-
-                {!editing && <Text style={styles.cardChev}>›</Text>}
+                <Text style={[styles.removeBtnText, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)' }]}>✕</Text>
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           );
         })}
 
         {/* Add a spot */}
-        {!editing && (
-          <TouchableOpacity
-            style={styles.addCard}
-            activeOpacity={0.8}
-            onPress={() => router.push('/add-location')}
-          >
-            <Text style={styles.addCardText}>+ Add a spot</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          style={[styles.addCard, { backgroundColor: cardBg, borderColor: addCardBorder }]}
+          activeOpacity={0.8}
+          onPress={() => router.push('/add-location')}
+        >
+          <Text style={styles.addCardText}>+ Add a spot</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -140,14 +123,13 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 6,
     minWidth: 70,
   },
   backChev: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 22,
-    lineHeight: 26,
-    color: '#7ef0d2',
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 28,
+    lineHeight: 32,
   },
   backLabel: {
     fontFamily: 'HankenGrotesk_500Medium',
@@ -166,12 +148,9 @@ const styles = StyleSheet.create({
     minWidth: 70,
     alignItems: 'flex-end',
   },
-  editBtnText: {
+  doneBtn: {
     fontFamily: 'HankenGrotesk_500Medium',
     fontSize: 16,
-    color: 'rgba(255,255,255,0.6)',
-  },
-  editBtnDone: {
     color: '#7ef0d2',
   },
 
@@ -181,30 +160,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  removeBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#c0392b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  removeBtnText: {
-    color: '#fff',
-    fontSize: 20,
-    lineHeight: 22,
-    fontWeight: '600',
-  },
-
   card: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
@@ -213,9 +169,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.09)',
     backgroundColor: 'rgba(255,255,255,0.04)',
     padding: 16,
-  },
-  cardEditing: {
-    opacity: 0.85,
   },
 
   badge: {
@@ -260,10 +213,19 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
 
-  cardChev: {
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.25)',
+  removeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
+  },
+  removeBtnText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    lineHeight: 16,
   },
 
   addCard: {

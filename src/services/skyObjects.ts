@@ -139,6 +139,8 @@ function buildSkyObject(candidate: Candidate, track: Track, bortle: number): Sky
     dirLabel: `${compassDir(track.riseAz)} → ${compassDir(track.peakAz)}`,
     dirDeg: track.peakAz,
     altCurve: track.points,
+    raHours: candidate.raHours,
+    decDeg: candidate.decDeg,
   };
 }
 
@@ -153,7 +155,26 @@ function skyObjectToPrime(obj: SkyObject): PrimeTarget {
     peakTime: obj.peakTime,
     transit: obj.transit,
     altCurve: obj.altCurve,
+    raHours: obj.raHours,
+    decDeg: obj.decDeg,
   };
+}
+
+// Re-compute a single object's visibility window for any night given its sky
+// coords and that night's dusk/dawn bounds. Used in object-detail when the
+// user taps a different day in the week strip.
+export function computeObjectWindow(
+  raHours: number,
+  decDeg: number,
+  lat: number,
+  lon: number,
+  duskMs: number,
+  dawnMs: number,
+): string {
+  const observer = new Astronomy.Observer(lat, lon, 0);
+  const track = trackObject(raHours, decDeg, observer, duskMs, dawnMs);
+  if (track.peakAlt < MIN_PEAK_ALTITUDE) return 'Below horizon';
+  return visibleWindowLabel(track);
 }
 
 const FLAT_CURVE: AltPoint[] = Array.from({ length: SAMPLE_COUNT }, () => ({ label: '', alt: 0 }));
@@ -243,6 +264,8 @@ export function computeTonightsSky(lat: number, lon: number, bortle: number, dus
       peakTime: formatClock(coreTrack.peakTime),
       transit: `${formatClock(coreTrack.peakTime)} ${compassDir(coreTrack.peakAz)}`,
       altCurve: coreTrack.points,
+      raHours: GALACTIC_CORE.raHours,
+      decDeg: GALACTIC_CORE.decDeg,
     };
     // allObjects is already capped sensibly per category (≤11 total) —
     // no further global slice, so planets/meteors can't get crowded out.

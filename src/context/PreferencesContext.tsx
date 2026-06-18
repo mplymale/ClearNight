@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = 'starcast:preferences';
+const STORAGE_KEY = 'clearnight:preferences';
 
 interface Preferences {
   use24h: boolean;

@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { DayForecast, Location } from '../../data/mockForecast';
 import { Verdict } from '../../constants/verdicts';
-import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD } from '../../context/NightVisionContext';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../../context/NightVisionContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
 
 // Single consistent chevron shape — rotated for open/closed instead of
@@ -90,6 +90,10 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
   const sheetBg = nightVision ? '#140200' : '#0a0c14';
   const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.10)';
   const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.52)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.36)';
+  const textSection = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.48)';
   const [open, setOpen] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -178,7 +182,7 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
             onPress={() => (open ? closeSheet() : openSheet())}
             activeOpacity={0.8}
           >
-            <Text style={styles.headerTitle}>Tonight's sky</Text>
+            <Text style={[styles.headerTitle, { color: textPrimary }]}>Tonight's sky</Text>
             <View style={styles.headerChevAbs}>
               <HeaderChevron open={open} />
             </View>
@@ -196,9 +200,9 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
           >
             {/* ── Hour-by-hour ── */}
             <View style={styles.sectionHead}>
-              <Text style={styles.sectionLabel}>Hour-by-hour · Tonight</Text>
+              <Text style={[styles.sectionLabel, { color: textSection }]}>Hour-by-hour · Tonight</Text>
               <View style={styles.legend}>
-                <Text style={styles.legendText}>Poor</Text>
+                <Text style={[styles.legendText, { color: textFaint }]}>Poor</Text>
                 <View style={styles.legendRamp}>
                   {[0, 1, 2, 3, 4, 5, 6].map(i => (
                     <View
@@ -207,7 +211,7 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
                     />
                   ))}
                 </View>
-                <Text style={styles.legendText}>Great</Text>
+                <Text style={[styles.legendText, { color: textFaint }]}>Great</Text>
               </View>
             </View>
 
@@ -226,7 +230,7 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
                         ]}
                       />
                     </View>
-                    <Text style={[styles.barLabel, inWin && styles.barLabelActive]}>
+                    <Text style={[styles.barLabel, { color: textFaint }, inWin && { color: textPrimary, fontFamily: 'HankenGrotesk_600SemiBold', fontWeight: '700' }]}>
                       {HOURS[i]}
                     </Text>
                     {/* Teal underline below label for in-window hours */}
@@ -242,14 +246,14 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
             {day.window && (
               <View style={styles.winNote}>
                 <View style={[styles.winDash, { backgroundColor: accent }]} />
-                <Text style={styles.winText}>Best window · {fmt(day.window.label)}</Text>
+                <Text style={[styles.winText, { color: textDim }]}>Best window · {fmt(day.window.label)}</Text>
               </View>
             )}
 
             {/* ── Visible tonight ── */}
             <View style={styles.visSectionHead}>
-              <Text style={styles.sectionLabel}>Visible Tonight</Text>
-              <Text style={styles.visSeeAll}>
+              <Text style={[styles.sectionLabel, { color: textSection }]}>Visible Tonight</Text>
+              <Text style={[styles.visSeeAll, { color: textFaint }]}>
                 {loc.objects.length + (loc.prime.peakAlt > 0 ? 1 : 0)} up · see all ›
               </Text>
             </View>
@@ -264,13 +268,13 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
                 onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
               >
                 <View style={styles.objMain}>
-                  <Text style={styles.objName}>{loc.prime.name}</Text>
-                  <Text style={styles.objId}>{loc.prime.sub}</Text>
-                  <Text style={styles.objStats}>Visible {fmt(loc.prime.visible)}</Text>
+                  <Text style={[styles.objName, { color: textPrimary }]}>{loc.prime.name}</Text>
+                  <Text style={[styles.objId, { color: textDim }]}>{loc.prime.sub}</Text>
+                  <Text style={[styles.objStats, { color: textFaint }]}>Visible {fmt(loc.prime.visible)}</Text>
                 </View>
                 <View style={styles.objRight}>
                   <Text style={[styles.objQuality, { color: accent }]}>PRIME</Text>
-                  <Text style={styles.objChev}>›</Text>
+                  <Text style={[styles.objChev, { color: textFaint }]}>›</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -283,15 +287,15 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
                 onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'object', objIndex: String(i) } })}
               >
                 <View style={styles.objMain}>
-                  <Text style={styles.objName}>{obj.name}</Text>
-                  <Text style={styles.objId}>{obj.cat} · {obj.con}</Text>
-                  <Text style={styles.objStats}>{obj.type} · Mag {obj.mag} · {obj.size}</Text>
+                  <Text style={[styles.objName, { color: textPrimary }]}>{obj.name}</Text>
+                  <Text style={[styles.objId, { color: textDim }]}>{obj.cat} · {obj.con}</Text>
+                  <Text style={[styles.objStats, { color: textFaint }]}>{obj.type} · Mag {obj.mag} · {obj.size}</Text>
                 </View>
                 <View style={styles.objRight}>
-                  <Text style={[styles.objQuality, { color: QUALITY_COLOR[obj.quality] ?? '#fff' }]}>
+                  <Text style={[styles.objQuality, { color: QUALITY_COLOR[obj.quality] ?? textPrimary }]}>
                     {obj.quality}
                   </Text>
-                  <Text style={styles.objChev}>›</Text>
+                  <Text style={[styles.objChev, { color: textFaint }]}>›</Text>
                 </View>
               </TouchableOpacity>
             ))}

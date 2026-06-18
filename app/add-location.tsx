@@ -15,13 +15,12 @@ import * as Location from 'expo-location';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocations } from '../src/context/LocationsContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { mkLocFromPlace } from '../src/data/mockForecast';
 import { haversineMiles, formatMiles } from '../src/services/geo';
 import { estimateBortle } from '../src/services/bortleEstimate';
 import { DARK_SKY_PLACES, DarkSkyPlace as Place } from '../src/data/darkSkyPlaces';
-
-const ACCENT = '#7ef0d2';
 
 function SearchIcon() {
   return (
@@ -32,7 +31,7 @@ function SearchIcon() {
   );
 }
 
-function GpsIcon({ color = ACCENT }: { color?: string }) {
+function GpsIcon({ color = '#7ef0d2' }: { color?: string }) {
   return (
     <Svg width={18} height={18} viewBox="0 0 18 18" fill="none">
       <Path d="M9 1 L17 9 L9 17 L1 9 Z" fill={color} opacity={0.9} />
@@ -41,11 +40,11 @@ function GpsIcon({ color = ACCENT }: { color?: string }) {
   );
 }
 
-function MoonIcon() {
+function MoonIcon({ color = '#7ef0d2' }: { color?: string }) {
   return (
     <Svg width={22} height={22} viewBox="0 0 22 22" fill="none">
       <Circle cx={11} cy={11} r={9} fill="rgba(126,240,210,0.12)" />
-      <Path d="M11 4 A7 7 0 0 1 11 18 A7 7 0 0 0 11 4Z" fill={ACCENT} opacity={0.85} />
+      <Path d="M11 4 A7 7 0 0 1 11 18 A7 7 0 0 0 11 4Z" fill={color} opacity={0.85} />
     </Svg>
   );
 }
@@ -62,6 +61,14 @@ export default function AddLocationScreen() {
   const insets = useSafeAreaInsets();
   const { addLocation, locations, activeLocIndex } = useLocations();
   const { status } = useSubscription();
+  const { nightVision } = useNightVision();
+  const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
+  const containerBg = nightVision ? '#150400' : '#080b12';
+  const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
+  const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.09)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.5)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.38)';
   const isFree = status === 'free';
   const hasLocation = locations.length > 0;
   const [query, setQuery] = useState('');
@@ -223,13 +230,14 @@ export default function AddLocationScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: containerBg }]}>
       {/* Nav */}
       <View style={styles.nav}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.cancelBtn}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.backBtn}>
+          <Text style={[styles.backChev, { color: nvAccent }]}>‹</Text>
+          <Text style={[styles.backLabel, { color: nvAccent }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.navTitle}>Add a Spot</Text>
+        <Text style={[styles.navTitle, { color: textPrimary }]}>Add a Spot</Text>
         <View style={styles.navRight} />
       </View>
 
@@ -239,55 +247,55 @@ export default function AddLocationScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Search */}
-        <View style={styles.searchBox}>
+        <View style={[styles.searchBox, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <SearchIcon />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: textPrimary }]}
             placeholder="Search a place or park..."
-            placeholderTextColor="rgba(255,255,255,0.35)"
+            placeholderTextColor={textFaint}
             value={query}
             onChangeText={setQuery}
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="words"
           />
-          {searching && <ActivityIndicator size="small" color={ACCENT} />}
+          {searching && <ActivityIndicator size="small" color={nvAccent} />}
         </View>
 
         {/* Use current location */}
         <TouchableOpacity
-          style={styles.gpsRow}
+          style={[styles.gpsRow, { backgroundColor: cardBg, borderColor: cardBorder }]}
           onPress={isFree && hasLocation ? () => router.push('/paywall') : handleUseLocation}
           activeOpacity={0.8}
           disabled={gpsLoading}
         >
-          <View style={styles.gpsIconWrap}>
+          <View style={[styles.gpsIconWrap, nightVision && { backgroundColor: 'rgba(224,120,48,0.12)' }]}>
             {gpsLoading
-              ? <ActivityIndicator size="small" color={ACCENT} />
-              : <GpsIcon />
+              ? <ActivityIndicator size="small" color={nvAccent} />
+              : <GpsIcon color={nvAccent} />
             }
           </View>
           <View style={styles.gpsMain}>
-            <Text style={styles.gpsTitle}>Use my current location</Text>
-            <Text style={styles.gpsSub}>GPS · most accurate</Text>
+            <Text style={[styles.gpsTitle, { color: textPrimary }]}>Use my current location</Text>
+            <Text style={[styles.gpsSub, { color: textDim }]}>GPS · most accurate</Text>
           </View>
-          {!gpsLoading && <Text style={styles.gpsChev}>›</Text>}
+          {!gpsLoading && <Text style={[styles.gpsChev, { color: nvAccent }]}>›</Text>}
         </TouchableOpacity>
 
         {/* Free tier: upgrade banner for multiple spots */}
         {isFree && hasLocation && (
           <TouchableOpacity style={styles.upgradeBanner} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
             <View style={styles.upgradeBannerMain}>
-              <Text style={styles.upgradeBannerTitle}>⭐ Unlock multiple spots</Text>
-              <Text style={styles.upgradeBannerSub}>Premium lets you save home, dark sites, and travel spots — switch between them instantly.</Text>
+              <Text style={[styles.upgradeBannerTitle, { color: textPrimary }]}>⭐ Unlock multiple spots</Text>
+              <Text style={[styles.upgradeBannerSub, { color: textDim }]}>Premium lets you save home, dark sites, and travel spots — switch between them instantly.</Text>
             </View>
-            <Text style={styles.upgradeBannerCta}>Upgrade</Text>
+            <Text style={[styles.upgradeBannerCta, { color: nvAccent }]}>Upgrade</Text>
           </TouchableOpacity>
         )}
 
         {showingSearch ? (
           <>
-            <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
+            <Text style={[styles.sectionLabel, { color: textFaint }]}>SEARCH RESULTS</Text>
             <View style={styles.placeList}>
               {results.length > 0 ? (
                 results.map((r) => {
@@ -296,26 +304,26 @@ export default function AddLocationScreen() {
                   return (
                     <TouchableOpacity
                       key={r.key}
-                      style={[styles.placeRow, added && styles.placeRowAdded]}
+                      style={[styles.placeRow, { backgroundColor: cardBg, borderColor: cardBorder }, added && { borderColor: `${nvAccent}40`, backgroundColor: nightVision ? 'rgba(224,120,48,0.05)' : 'rgba(126,240,210,0.05)' }]}
                       activeOpacity={0.8}
                       onPress={() => isFree && hasLocation ? router.push('/paywall') : handleSearchResult(r)}
                     >
-                      <View style={styles.moonIcon}>
-                        <MoonIcon />
+                      <View style={[styles.moonIcon, nightVision && { backgroundColor: 'rgba(224,120,48,0.07)' }]}>
+                        <MoonIcon color={nvAccent} />
                       </View>
                       <View style={styles.placeMain}>
-                        <Text style={styles.placeName}>{r.city}</Text>
-                        <Text style={styles.placeMeta}>
+                        <Text style={[styles.placeName, { color: textPrimary }]}>{r.city}</Text>
+                        <Text style={[styles.placeMeta, { color: textDim }]}>
                           {r.region}{distMi !== null ? ` · ${formatMiles(distMi)}` : ''}
                         </Text>
                       </View>
-                      {added && <CheckIcon size={16} color={ACCENT} strokeWidth={2.5} />}
+                      {added && <CheckIcon size={16} color={nvAccent} strokeWidth={2.5} />}
                     </TouchableOpacity>
                   );
                 })
               ) : (
                 !searching && searchError && (
-                  <Text style={styles.searchEmptyText}>{searchError}</Text>
+                  <Text style={[styles.searchEmptyText, { color: textFaint }]}>{searchError}</Text>
                 )
               )}
             </View>
@@ -323,7 +331,7 @@ export default function AddLocationScreen() {
         ) : (
           <>
             {/* Dark-sky places nearby */}
-            <Text style={styles.sectionLabel}>DARK-SKY PLACES NEARBY</Text>
+            <Text style={[styles.sectionLabel, { color: textFaint }]}>DARK-SKY PLACES NEARBY</Text>
 
             <View style={styles.placeList}>
               {placesWithDistance.map((place, i) => {
@@ -331,22 +339,22 @@ export default function AddLocationScreen() {
                 return (
                   <TouchableOpacity
                     key={i}
-                    style={[styles.placeRow, added && styles.placeRowAdded]}
+                    style={[styles.placeRow, { backgroundColor: cardBg, borderColor: cardBorder }, added && { borderColor: `${nvAccent}40`, backgroundColor: nightVision ? 'rgba(224,120,48,0.05)' : 'rgba(126,240,210,0.05)' }]}
                     activeOpacity={0.8}
                     onPress={() => isFree && hasLocation ? router.push('/paywall') : handleAddPlace(place)}
                   >
-                    <View style={styles.moonIcon}>
-                      <MoonIcon />
+                    <View style={[styles.moonIcon, nightVision && { backgroundColor: 'rgba(224,120,48,0.07)' }]}>
+                      <MoonIcon color={nvAccent} />
                     </View>
                     <View style={styles.placeMain}>
-                      <Text style={styles.placeName}>{place.name}</Text>
-                      <Text style={styles.placeMeta}>
+                      <Text style={[styles.placeName, { color: textPrimary }]}>{place.name}</Text>
+                      <Text style={[styles.placeMeta, { color: textDim }]}>
                         {place.state}{place.distMi !== null ? ` · ${formatMiles(place.distMi)}` : ''}
                       </Text>
                     </View>
                     {added
-                      ? <CheckIcon size={16} color={ACCENT} strokeWidth={2.5} />
-                      : <Text style={styles.placeBortle}>B{place.bortle}</Text>
+                      ? <CheckIcon size={16} color={nvAccent} strokeWidth={2.5} />
+                      : <Text style={[styles.placeBortle, { color: textFaint }]}>B{place.bortle}</Text>
                     }
                   </TouchableOpacity>
                 );
@@ -371,12 +379,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
-  cancelBtn: { minWidth: 70 },
-  cancelText: {
-    fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
-  },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 70 },
+  backChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
+  backLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15 },
   navTitle: {
     flex: 1,
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -454,7 +459,7 @@ const styles = StyleSheet.create({
   },
   gpsChev: {
     fontSize: 20,
-    color: ACCENT,
+    color: '#7ef0d2',
     flexShrink: 0,
   },
 
@@ -487,7 +492,7 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 13,
     fontWeight: '600',
-    color: ACCENT,
+    color: '#7ef0d2',
     flexShrink: 0,
   },
 
@@ -513,7 +518,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.09)',
   },
   placeRowAdded: {
-    borderColor: `${ACCENT}40`,
+    borderColor: '#7ef0d240',
     backgroundColor: 'rgba(126,240,210,0.05)',
   },
   moonIcon: {
@@ -549,7 +554,7 @@ const styles = StyleSheet.create({
   },
   placeAdded: {
     fontSize: 16,
-    color: ACCENT,
+    color: '#7ef0d2',
     flexShrink: 0,
   },
 });

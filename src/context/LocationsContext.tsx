@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Location } from '../data/mockForecast';
 import { buildRealForecast } from '../services/forecastEngine';
 
-const STORAGE_KEY_LOCATIONS = 'starcast:locations';
-const STORAGE_KEY_ACTIVE_INDEX = 'starcast:activeLocIndex';
+const STORAGE_KEY_LOCATIONS = 'clearnight:locations';
+const STORAGE_KEY_ACTIVE_INDEX = 'clearnight:activeLocIndex';
 
 interface LocationsContextValue {
   locations: Location[];

@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD } from '../src/context/NightVisionContext';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { usePreferences, formatQuietHours } from '../src/context/PreferencesContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
@@ -98,8 +98,8 @@ function ThreshPresetRow({ value, onChange, accent = '#7ef0d2', divider }: {
 
 // ── Reusable section primitives ───────────────────────────────────────────────
 
-function SectionLabel({ text }: { text: string }) {
-  return <Text style={styles.sectionLabel}>{text}</Text>;
+function SectionLabel({ text, color }: { text: string; color?: string }) {
+  return <Text style={[styles.sectionLabel, color && { color }]}>{text}</Text>;
 }
 
 function Card({ children, border, bg }: { children: React.ReactNode; border?: string; bg?: string }) {
@@ -107,7 +107,7 @@ function Card({ children, border, bg }: { children: React.ReactNode; border?: st
 }
 
 function Row({
-  name, sub, right, onPress, borderless, divider,
+  name, sub, right, onPress, borderless, divider, nameColor, subColor,
 }: {
   name: string;
   sub?: string;
@@ -115,12 +115,14 @@ function Row({
   onPress?: () => void;
   borderless?: boolean;
   divider?: string;
+  nameColor?: string;
+  subColor?: string;
 }) {
   const Inner = (
     <View style={[styles.row, borderless && styles.rowBorderless, divider && { borderBottomColor: divider }]}>
       <View style={styles.rowMain}>
-        <Text style={styles.rowName}>{name}</Text>
-        {sub && <Text style={styles.rowSub}>{sub}</Text>}
+        <Text style={[styles.rowName, nameColor && { color: nameColor }]}>{name}</Text>
+        {sub && <Text style={[styles.rowSub, subColor && { color: subColor }]}>{sub}</Text>}
       </View>
       {right && <View style={styles.rowRight}>{right}</View>}
     </View>
@@ -360,6 +362,9 @@ export default function SettingsScreen() {
   const rowDivider = nightVision ? 'rgba(180,60,20,0.15)' : 'rgba(255,255,255,0.06)';
   const premIconBorder = nightVision ? `rgba(224,120,48,0.35)` : `rgba(126,240,210,0.3)`;
   const premIconBg = nightVision ? `rgba(224,120,48,0.12)` : `rgba(126,240,210,0.12)`;
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
 
   return (
     <LinearGradient
@@ -376,8 +381,10 @@ export default function SettingsScreen() {
             <Text style={[styles.navBackChev, { color: ACCENT }]}>‹</Text>
             <Text style={[styles.navBackLabel, { color: ACCENT }]}>Home</Text>
           </TouchableOpacity>
-          <Text style={styles.navTitle}>Settings</Text>
-          <View style={styles.navSpacer} />
+          <Text style={[styles.navTitle, { color: textPrimary }]}>Settings</Text>
+          <TouchableOpacity style={styles.navSpacer} onPress={() => router.back()} activeOpacity={0.7}>
+            <Text style={[styles.navDone, { color: ACCENT }]}>Done</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Dev tier toggle */}
@@ -396,15 +403,15 @@ export default function SettingsScreen() {
 
         {/* ── MEMBERSHIP ── */}
         <View style={styles.group}>
-          <SectionLabel text="Membership" />
+          <SectionLabel text="Membership" color={textFaint} />
           {isPremium ? (
             <View style={[styles.premCard, { borderColor: cardBorder, backgroundColor: cardBg }]}>
               <View style={[styles.premIcon, { borderColor: premIconBorder, backgroundColor: premIconBg }]}>
                 <ForecastMark size={24} accent={ACCENT} />
               </View>
               <View style={styles.premMain}>
-                <Text style={styles.premTitle}>StarCast Premium</Text>
-                <Text style={styles.premSub}>All features unlocked · thank you</Text>
+                <Text style={[styles.premTitle, { color: textPrimary }]}>ClearNight Premium</Text>
+                <Text style={[styles.premSub, { color: textDim }]}>All features unlocked · thank you</Text>
               </View>
               <CheckIcon size={18} color={ACCENT} strokeWidth={2.5} />
             </View>
@@ -414,8 +421,8 @@ export default function SettingsScreen() {
                 <ForecastMark size={24} accent={ACCENT} />
               </View>
               <View style={styles.premMain}>
-                <Text style={styles.premTitle}>StarCast Premium</Text>
-                <Text style={styles.premSub}>
+                <Text style={[styles.premTitle, { color: textPrimary }]}>ClearNight Premium</Text>
+                <Text style={[styles.premSub, { color: textDim }]}>
                   {tier === 'trial'
                     ? 'Trial active — keep alerts & the full week'
                     : 'Unlock alerts, targets & the 7-night forecast'}
@@ -430,7 +437,7 @@ export default function SettingsScreen() {
 
         {/* ── ALERTS ── */}
         <View style={styles.group}>
-          <SectionLabel text="Alerts" />
+          <SectionLabel text="Alerts" color={textFaint} />
           <Card border={cardBorder} bg={cardBg}>
             {unlocked ? (
               <>
@@ -440,11 +447,13 @@ export default function SettingsScreen() {
                   sub="A nudge by 6pm on good nights"
                   right={<Toggle value={push} onToggle={() => setPush((p) => !p)} accent={ACCENT} />}
                   divider={rowDivider}
+                  nameColor={textPrimary} subColor={textDim}
                 />
                 <Row
                   name="Quiet hours"
-                  right={<Text style={styles.rowVal}>{formatQuietHours(quietStart, quietEnd, use24h)}  ›</Text>}
+                  right={<Text style={[styles.rowVal, { color: textDim }]}>{formatQuietHours(quietStart, quietEnd, use24h)}  ›</Text>}
                   onPress={() => setQuietPickerVisible(true)}
+                  nameColor={textPrimary}
                   borderless
                 />
               </>
@@ -452,10 +461,10 @@ export default function SettingsScreen() {
               <View style={styles.lockedRow}>
                 <View style={styles.lockedMain}>
                   <View style={styles.lockedNameRow}>
-                    <Text style={styles.rowName}>GO alerts</Text>
+                    <Text style={[styles.rowName, { color: textPrimary }]}>GO alerts</Text>
                     <PremPill />
                   </View>
-                  <Text style={styles.rowSub}>
+                  <Text style={[styles.rowSub, { color: textDim }]}>
                     Get pushed when tonight — or a night this week — turns into a GO.
                   </Text>
                 </View>
@@ -469,55 +478,62 @@ export default function SettingsScreen() {
 
         {/* ── DISPLAY ── */}
         <View style={styles.group}>
-          <SectionLabel text="Display" />
+          <SectionLabel text="Display" color={textFaint} />
           <Card border={cardBorder} bg={cardBg}>
             <Row
               name="Night vision"
               sub="Red mode preserves dark adaptation"
               right={<Toggle value={nightVision} onToggle={() => setNightVision(!nightVision)} accent={ACCENT} />}
               divider={rowDivider}
+              nameColor={textPrimary} subColor={textDim}
             />
             <Row
               name="Temperature"
               right={<SegControl options={['°F', '°C']} value={useCelsius ? '°C' : '°F'} onChange={(v) => setUseCelsius(v === '°C')} accent={ACCENT} />}
               divider={rowDivider}
+              nameColor={textPrimary}
             />
             <Row
               name="Time format"
               right={<SegControl options={['12h', '24h']} value={use24h ? '24h' : '12h'} onChange={(v) => setUse24h(v === '24h')} accent={ACCENT} />}
               borderless
+              nameColor={textPrimary}
             />
           </Card>
         </View>
 
         {/* ── ACCOUNT ── */}
         <View style={styles.group}>
-          <SectionLabel text="Account" />
+          <SectionLabel text="Account" color={textFaint} />
           <Card border={cardBorder} bg={cardBg}>
             <Row
               name="Redeem offer code"
-              right={<Text style={styles.rowChev}>›</Text>}
+              right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
               onPress={() => router.push('/redeem-code')}
               divider={rowDivider}
+              nameColor={textPrimary}
             />
             <Row
               name="Privacy Policy"
-              right={<Text style={styles.rowChev}>›</Text>}
+              right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
               onPress={() => router.push('/privacy-policy')}
               divider={rowDivider}
+              nameColor={textPrimary}
             />
             <Row
               name="Terms of Use"
-              right={<Text style={styles.rowChev}>›</Text>}
+              right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
               onPress={() => router.push('/terms')}
               divider={rowDivider}
+              nameColor={textPrimary}
             />
             <Row
-              name="About StarCast"
+              name="About ClearNight"
               sub="Version 1.0"
-              right={<Text style={styles.rowChev}>›</Text>}
+              right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
               onPress={() => router.push('/about')}
               borderless
+              nameColor={textPrimary} subColor={textDim}
             />
           </Card>
         </View>
@@ -556,13 +572,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minWidth: 64,
-    gap: 2,
+    gap: 6,
   },
   navBackChev: {
     fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: 20,
-    color: '#7ef0d2',
-    lineHeight: 24,
+    fontSize: 28,
+    lineHeight: 32,
   },
   navBackLabel: {
     fontFamily: 'HankenGrotesk_500Medium',
@@ -577,7 +592,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  navSpacer: { minWidth: 64 },
+  navSpacer: { minWidth: 64, alignItems: 'flex-end' },
+  navDone: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 16,
+  },
 
   // dev tier toggle
   devRow: {

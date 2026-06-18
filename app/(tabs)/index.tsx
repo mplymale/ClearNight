@@ -16,7 +16,7 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { router } from 'expo-router';
 
 import { VERDICTS } from '../../src/constants/verdicts';
-import { useNightVision, NV_ACCENT, NV_BORDER } from '../../src/context/NightVisionContext';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../../src/context/NightVisionContext';
 import { usePlan } from '../../src/context/PlanContext';
 import { useLocations } from '../../src/context/LocationsContext';
 import { BottomSheet } from '../../src/components/home/BottomSheet';
@@ -123,16 +123,10 @@ function TopSection(p: TopSectionProps) {
   const nvAccent = nightVision ? NV_ACCENT : undefined;
   const btnBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.14)';
   const btnBg = nightVision ? 'rgba(120,30,10,0.25)' : 'rgba(255,255,255,0.07)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.55)';
   return (
     <View style={styles.topSection}>
-      {/* Brand row */}
-      <View style={styles.brand}>
-        <ForecastMark size={28} accent={nvAccent} />
-        <Text style={styles.brandWord}>
-          Star<Text style={styles.brandWordFaded}>Cast</Text>
-        </Text>
-      </View>
-
       {/* Location row: [≡] [‹ City ›] [⚙]  */}
       <View style={styles.locRow}>
         <TouchableOpacity style={[styles.iconBtn, { borderColor: btnBorder, backgroundColor: btnBg }]} onPress={p.onList} activeOpacity={0.7}>
@@ -159,15 +153,15 @@ function TopSection(p: TopSectionProps) {
         <View style={styles.locCenter}>
           {p.isFree ? (
             <View style={styles.freeLocNameRow}>
-              <Text style={styles.locName}>{p.locName}</Text>
-              <LockIcon color="rgba(255,255,255,0.55)" />
+              <Text style={[styles.locName, { color: textPrimary }]}>{p.locName}</Text>
+              <LockIcon color={nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.55)'} />
             </View>
           ) : (
             <TouchableOpacity onPress={p.onManage} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.locName} numberOfLines={1}>{p.locName}</Text>
+              <Text style={[styles.locName, { color: textPrimary }]} numberOfLines={1}>{p.locName}</Text>
             </TouchableOpacity>
           )}
-          <Text style={styles.locRegion}>{p.locRegion}</Text>
+          <Text style={[styles.locRegion, { color: textDim }]}>{p.locRegion}</Text>
         </View>
 
         {/* Right chevron */}
@@ -201,6 +195,15 @@ function TopSection(p: TopSectionProps) {
         <TouchableOpacity activeOpacity={0.7} onPress={p.onAddSpot}>
           <Text style={[styles.freeLocAdd, { color: p.accentColor }]}>
             + Add more spots with Premium
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Premium single-spot nudge */}
+      {p.isPremium && p.locCount === 1 && (
+        <TouchableOpacity activeOpacity={0.7} onPress={p.onAddSpot}>
+          <Text style={[styles.freeLocAdd, { color: p.accentColor }]}>
+            + Add more spots
           </Text>
         </TouchableOpacity>
       )}
@@ -239,6 +242,8 @@ export default function HomeScreen() {
   }, [activeLocIndex]);
 
   const isFree = status === 'free';
+  const nvTextPrimary = nightVision ? NV_TEXT : '#fff';
+  const nvTextDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.72)';
 
   const safeLocIndex = Math.min(locIndex, Math.max(0, locations.length - 1));
   const loc = locations.length > 0 ? (isFree ? locations[0] : locations[safeLocIndex]) : null;
@@ -305,8 +310,8 @@ export default function HomeScreen() {
   if (!loc || !day) {
     return (
       <View style={[styles.container, styles.emptyState, { paddingTop: insets.top }]}>
-        <Text style={styles.emptyStateTitle}>No spots yet</Text>
-        <Text style={styles.emptyStateBody}>Add a place to see tonight's forecast.</Text>
+        <Text style={[styles.emptyStateTitle, { color: nvTextPrimary }]}>No spots yet</Text>
+        <Text style={[styles.emptyStateBody, { color: nvTextDim }]}>Add a place to see tonight's forecast.</Text>
         <TouchableOpacity
           style={styles.emptyStateBtn}
           activeOpacity={0.85}
@@ -369,8 +374,8 @@ export default function HomeScreen() {
         {status === 'trial' && (
           <View style={styles.trialBanner}>
             <View style={[styles.trialDot, { backgroundColor: verdict.accent }]} />
-            <Text style={styles.trialText}>
-              <Text style={styles.trialBold}>Premium trial</Text>
+            <Text style={[styles.trialText, { color: nvTextDim }]}>
+              <Text style={[styles.trialBold, { color: nvTextPrimary }]}>Premium trial</Text>
               {' · 5 days left — full forecast & GO alerts'}
             </Text>
             <TouchableOpacity style={[styles.trialBtn, { backgroundColor: verdict.accent }]} activeOpacity={0.8} onPress={() => router.push('/paywall')}>

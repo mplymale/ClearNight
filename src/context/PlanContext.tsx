@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY_PLAN = 'starcast:plan';
-const STORAGE_KEY_CAPTURED = 'starcast:planCaptured';
+const STORAGE_KEY_PLAN = 'clearnight:plan';
+const STORAGE_KEY_CAPTURED = 'clearnight:planCaptured';
 
 interface PlanCtx {
   plan: Set<string>;

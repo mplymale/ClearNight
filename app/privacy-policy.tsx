@@ -36,11 +36,11 @@ export default function PrivacyPolicyScreen() {
         <Text style={styles.updated}>Last updated: June 2026</Text>
 
         <Section title="Overview">
-          StarCast ("we", "our", or "us") is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your choices regarding your data.
+          ClearNight ("we", "our", or "us") is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your choices regarding your data.
         </Section>
 
         <Section title="Information We Collect">
-          {"Location data: We request access to your device's location to generate sky forecasts for your area. Location is used only locally on your device and is not transmitted to our servers.\n\nUsage data: We may collect anonymous, aggregated usage statistics to improve the app. This data cannot be used to identify you personally.\n\nPurchase data: If you subscribe to StarCast Premium, Apple handles all payment processing. We do not store your payment information."}
+          {"Location data: We request access to your device's location to generate sky forecasts for your area. Location is used only locally on your device and is not transmitted to our servers.\n\nUsage data: We may collect anonymous, aggregated usage statistics to improve the app. This data cannot be used to identify you personally.\n\nPurchase data: If you subscribe to ClearNight Premium, Apple handles all payment processing. We do not store your payment information."}
         </Section>
 
         <Section title="How We Use Your Information">
@@ -60,7 +60,7 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="Children's Privacy">
-          StarCast is not directed at children under 13. We do not knowingly collect personal information from children under 13.
+          ClearNight is not directed at children under 13. We do not knowingly collect personal information from children under 13.
         </Section>
 
         <Section title="Changes to This Policy">
@@ -68,7 +68,7 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="Contact Us">
-          If you have questions about this Privacy Policy, please contact us at privacy@starcastapp.com
+          If you have questions about this Privacy Policy, please contact us at privacy@clearnightapp.com
         </Section>
       </ScrollView>
     </LinearGradient>
@@ -85,8 +85,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 8,
   },
-  navBack: { flexDirection: 'row', alignItems: 'center', minWidth: 80, gap: 2 },
-  navBackChev: { fontSize: 20, lineHeight: 24 },
+  navBack: { flexDirection: 'row', alignItems: 'center', minWidth: 80, gap: 6 },
+  navBackChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
   navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15 },
   navTitle: {
     flex: 1,

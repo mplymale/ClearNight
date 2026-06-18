@@ -29,7 +29,7 @@ export default function AboutScreen() {
           <View style={styles.heroIcon}>
             <AppLogo size={56} animate={false} />
           </View>
-          <Text style={styles.heroName}>StarCast</Text>
+          <Text style={styles.heroName}>ClearNight</Text>
           <Text style={styles.heroVersion}>Version 1.0.0</Text>
         </View>
 
@@ -39,7 +39,7 @@ export default function AboutScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardBody}>
-            StarCast helps amateur astronomers and astrophotographers plan their nights around the sky — not just the weather. We combine seeing conditions, light pollution estimates, celestial object windows, and cloud forecasts into a single score so you know exactly when to go out.
+            ClearNight helps amateur astronomers and astrophotographers plan their nights around the sky — not just the weather. We combine seeing conditions, light pollution estimates, celestial object windows, and cloud forecasts into a single score so you know exactly when to go out.
           </Text>
         </View>
 
@@ -52,7 +52,7 @@ export default function AboutScreen() {
         <View style={styles.metaList}>
           <View style={styles.metaRow}>
             <Text style={styles.metaLabel}>Developer</Text>
-            <Text style={styles.metaValue}>StarCast LLC</Text>
+            <Text style={styles.metaValue}>ClearNight LLC</Text>
           </View>
           <View style={styles.metaDivider} />
           <View style={styles.metaRow}>
@@ -80,8 +80,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 8,
   },
-  navBack: { flexDirection: 'row', alignItems: 'center', minWidth: 80, gap: 2 },
-  navBackChev: { fontSize: 20, lineHeight: 24 },
+  navBack: { flexDirection: 'row', alignItems: 'center', minWidth: 80, gap: 6 },
+  navBackChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
   navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15 },
   navTitle: {
     flex: 1,

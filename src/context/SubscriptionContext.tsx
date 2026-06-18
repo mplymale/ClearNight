@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = 'starcast:subscriptionStatus';
+const STORAGE_KEY = 'clearnight:subscriptionStatus';
 
 // 'trial' and 'subscribed' both unlock premium features — the distinction
 // is just whether the trial banner/CTA should still show. 'free' is the

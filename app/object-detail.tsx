@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -18,6 +18,8 @@ import { useAlerts } from '../src/context/AlertsContext';
 import { useFavorites } from '../src/context/FavoritesContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
 import { usePreferences, applyTimeFormat } from '../src/context/PreferencesContext';
+import { computeObjectWindow } from '../src/services/skyObjects';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 
 // Object visibility quality has its own color scale, independent of the
 // night's overall verdict accent (used elsewhere on this screen).
@@ -155,30 +157,35 @@ function Compass({ deg, accent }: { deg: number; accent: string }) {
 // altitude chart above with no new information. This instead answers a real
 // question: which of the next 6 nights is actually worth coming back for.
 
-function WeekBars({ days, accent }: { days: DayForecast[]; accent: string }) {
+function WeekBars({ days, accent, selectedIdx, onSelect }: {
+  days: DayForecast[];
+  accent: string;
+  selectedIdx: number;
+  onSelect: (i: number) => void;
+}) {
   const BAR_MAX_H = 40;
   return (
     <View style={styles.weekBars}>
       {days.map((d, i) => {
         const pct = Math.max(0.06, d.score / 100);
-        const isTonight = i === 0;
+        const isSelected = i === selectedIdx;
         return (
-          <View key={i} style={styles.weekBarCol}>
+          <TouchableOpacity key={i} style={styles.weekBarCol} activeOpacity={0.7} onPress={() => onSelect(i)}>
             <View style={styles.weekBarTrack}>
               <View
                 style={[
                   styles.weekBar,
                   {
                     height: pct * BAR_MAX_H,
-                    backgroundColor: isTonight ? accent : 'rgba(255,255,255,0.16)',
+                    backgroundColor: isSelected ? accent : 'rgba(255,255,255,0.16)',
                   },
                 ]}
               />
             </View>
-            <Text style={[styles.weekBarLabel, isTonight && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
+            <Text style={[styles.weekBarLabel, isSelected && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
               {i === 0 ? 'Now' : d.day}
             </Text>
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -207,6 +214,8 @@ export default function ObjectDetailScreen() {
     type: 'prime' | 'object';
     objIndex?: string;
   }>();
+  const [selectedDayIdx, setSelectedDayIdx] = useState(0);
+  const { nightVision } = useNightVision();
   const { addToPlan, removeFromPlan, inPlan } = usePlan();
   const { locations } = useLocations();
   const { hasAlert, getAlert } = useAlerts();
@@ -217,7 +226,10 @@ export default function ObjectDetailScreen() {
   const obj = isPrime ? loc.prime : loc.objects[Number(objIndex)];
   const dayVerdict = loc.days[0].verdict;
   const v = VERDICTS[dayVerdict];
-  const accent = v.accent;
+  const accent = nightVision ? NV_ACCENT : v.accent;
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
 
   const { status } = useSubscription();
   const { use24h } = usePreferences();
@@ -255,12 +267,12 @@ export default function ObjectDetailScreen() {
   }
 
   return (
-    <LinearGradient colors={['#04060e', '#06121f', '#0a1e2e']} style={styles.container}>
+    <LinearGradient colors={nightVision ? ['#100200', '#1a0400', '#200500'] : ['#04060e', '#06121f', '#0a1e2e']} style={styles.container}>
       {/* Sticky nav — sits above the ScrollView so content scrolls underneath it */}
-      <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.nav, { paddingTop: insets.top + 8, backgroundColor: nightVision ? '#100200' : '#04060e' }]}>
         <TouchableOpacity style={styles.navBack} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={styles.navBackChev}>‹</Text>
-          <Text style={styles.navBackLabel}>Tonight</Text>
+          <Text style={[styles.navBackChev, { color: accent }]}>‹</Text>
+          <Text style={[styles.navBackLabel, { color: accent }]}>Tonight</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navStar}
@@ -279,54 +291,81 @@ export default function ObjectDetailScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>
+          <Text style={[styles.eyebrow, { color: textFaint }]}>
             {isPrime ? 'PRIME TARGET' : (obj as typeof loc.objects[0]).type.toUpperCase()}{' '}
             <Text style={{ color: qualityColor }}>· {qualityWord.toUpperCase()}</Text>
           </Text>
-          <Text style={styles.title}>{name}</Text>
-          <Text style={styles.titleSub}>{sub}</Text>
+          <Text style={[styles.title, { color: textPrimary }]}>{name}</Text>
+          <Text style={[styles.titleSub, { color: textDim }]}>{sub}</Text>
         </View>
 
         {/* Altitude chart */}
-        <View style={styles.chartCard}>
-          <Text style={styles.chartLabel}>ALTITUDE TONIGHT</Text>
+        <View style={[styles.chartCard, nightVision && { borderColor: NV_BORDER, backgroundColor: NV_CARD }]}>
+          <Text style={[styles.chartLabel, { color: textFaint }]}>ALTITUDE TONIGHT</Text>
           <AltChart points={altCurve} accent={accent} />
         </View>
 
         {/* Best window card */}
-        <View style={[styles.windowCard, { borderColor: accent + '55', backgroundColor: accent + '14' }]}>
-          <Text style={[styles.windowLabel, { color: accent }]}>BEST WINDOW TONIGHT</Text>
-          <Text style={styles.windowTime}>{fmt(window_)}</Text>
-          <Text style={styles.weekBarsCaption}>VIEWING QUALITY THIS WEEK</Text>
-          <WeekBars days={loc.days} accent={accent} />
-        </View>
+        {(() => {
+          const selDay = loc.days[selectedDayIdx];
+          const dayLabel = selectedDayIdx === 0 ? 'TONIGHT' : selDay.day.toUpperCase();
+          const objRa = isPrime ? (obj as typeof loc.prime).raHours : (obj as typeof loc.objects[0]).raHours;
+          const objDec = isPrime ? (obj as typeof loc.prime).decDeg : (obj as typeof loc.objects[0]).decDeg;
+
+          let displayWindow: string;
+          if (selectedDayIdx === 0) {
+            displayWindow = fmt(window_);
+          } else if (objRa !== undefined && objDec !== undefined && selDay.duskMs && selDay.dawnMs) {
+            const computed = computeObjectWindow(objRa, objDec, loc.latitude, loc.longitude, selDay.duskMs, selDay.dawnMs);
+            displayWindow = fmt(computed);
+          } else {
+            displayWindow = selDay.window?.label ? fmt(selDay.window.label) : 'No clear window';
+          }
+
+          return (
+            <View style={[styles.windowCard, { borderColor: accent + '55', backgroundColor: accent + '14' }]}>
+              <Text style={[styles.windowLabel, { color: accent }]}>BEST WINDOW {dayLabel}</Text>
+              <Text style={[styles.windowTime, { color: textPrimary }]}>{displayWindow}</Text>
+              <Text style={[styles.weekBarsCaption, { color: textFaint }]}>VIEWING QUALITY THIS WEEK</Text>
+              <WeekBars days={loc.days} accent={accent} selectedIdx={selectedDayIdx} onSelect={setSelectedDayIdx} />
+            </View>
+          );
+        })()}
 
         {/* Stats 2×2 */}
         <View style={styles.statsGrid}>
-          <StatCard label="PEAK ALTITUDE" value={`${peakAlt}°`} sub={`at ${fmt(peakTime)}`} />
-          <StatCard label="TRANSIT" value={fmt(transit.split(' ')[0])} sub={transit.split(' ').slice(1).join(' ')} />
-          <StatCard label="MAGNITUDE" value={mag} />
-          <StatCard label="APPARENT SIZE" value={size} />
+          {([
+            { label: 'PEAK ALTITUDE', value: `${peakAlt}°`, sub: `at ${fmt(peakTime)}` },
+            { label: 'TRANSIT', value: fmt(transit.split(' ')[0]), sub: transit.split(' ').slice(1).join(' ') },
+            { label: 'MAGNITUDE', value: mag },
+            { label: 'APPARENT SIZE', value: size },
+          ] as { label: string; value: string; sub?: string }[]).map((props) => (
+            <View key={props.label} style={[styles.statCard, nightVision && { borderColor: NV_BORDER, backgroundColor: NV_CARD }]}>
+              <Text style={[styles.statLabel, { color: textFaint }]}>{props.label}</Text>
+              <Text style={[styles.statValue, { color: textPrimary }]}>{props.value}</Text>
+              {props.sub && <Text style={[styles.statSub, { color: textDim }]}>{props.sub}</Text>}
+            </View>
+          ))}
         </View>
 
         {/* Direction */}
-        <View style={styles.dirCard}>
+        <View style={[styles.dirCard, nightVision && { borderColor: NV_BORDER, backgroundColor: NV_CARD }]}>
           <View style={styles.dirLeft}>
-            <Text style={styles.statLabel}>DIRECTION</Text>
-            <Text style={styles.dirValue}>{dirLabel}</Text>
+            <Text style={[styles.statLabel, { color: textFaint }]}>DIRECTION</Text>
+            <Text style={[styles.dirValue, { color: textPrimary }]}>{dirLabel}</Text>
           </View>
           <Compass deg={dirDeg} accent={accent} />
         </View>
       </ScrollView>
 
       {/* Sticky bottom buttons */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }, nightVision && { backgroundColor: 'rgba(20,2,0,0.94)', borderTopColor: NV_BORDER }]}>
         <TouchableOpacity
           style={[styles.planBtn, planned && { borderColor: accent, backgroundColor: accent + '18' }]}
           onPress={() => planned ? removeFromPlan(planKey) : addToPlan(planKey)}
           activeOpacity={0.8}
         >
-          <Text style={[styles.planBtnText, planned && { color: accent }]}>
+          <Text style={[styles.planBtnText, { color: planned ? accent : textPrimary }]}>
             {planned ? '✓ In your plan' : 'Add to plan'}
           </Text>
         </TouchableOpacity>
@@ -340,7 +379,10 @@ export default function ObjectDetailScreen() {
               : { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'rgba(255,255,255,0.06)' },
           ]}
           activeOpacity={0.8}
-          onPress={isPro ? openAlertSetup : () => router.push('/paywall')}
+          onPress={isPro ? openAlertSetup : () => router.push({
+            pathname: '/paywall',
+            params: { returnTo: 'object-detail', locIndex, type, objIndex: objIndex ?? '' },
+          })}
         >
           <Text style={[styles.alertBtnText, { color: isPro ? (alertSet ? accent : '#04130f') : 'rgba(255,255,255,0.55)' }]}>
             {isPro
@@ -368,10 +410,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#04060e',
   },
   navBack: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  navBackChev: { fontFamily: 'SpaceGrotesk_600SemiBold', fontSize: 26, lineHeight: 30, color: '#fff' },
+  navBackChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
   navStar: { padding: 4 },
   navStarIcon: { fontSize: 22, color: 'rgba(255,255,255,0.5)' },
-  navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 18, color: '#fff' },
+  navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15 },
 
   header: { paddingTop: 8, paddingBottom: 18, gap: 3 },
   eyebrow: {

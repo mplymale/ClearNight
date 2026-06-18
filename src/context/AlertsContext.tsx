@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { cancelLocalAlert, scheduleLocalAlert } from '../services/alertScheduling';
 
-const STORAGE_KEY = 'starcast:alerts';
+const STORAGE_KEY = 'clearnight:alerts';
 
 interface ScheduledFire {
   notificationId: string;

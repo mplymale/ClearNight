@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = 'starcast:interests';
+const STORAGE_KEY = 'clearnight:interests';
 
 export interface Interests {
   milky: boolean;

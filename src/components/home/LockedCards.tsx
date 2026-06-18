@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { Verdict } from '../../constants/verdicts';
+import { useNightVision, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM } from '../../context/NightVisionContext';
 
 // ── Tiny icons ──────────────────────────────────────────────────────────────
 
@@ -61,34 +62,39 @@ interface Props {
 }
 
 export function LockedCards({ verdict: v, weekScores, onUpgrade }: Props) {
+  const { nightVision } = useNightVision();
+  const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.045)';
+  const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.12)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
   return (
     <View style={styles.container}>
       {/* Card 1 — The week ahead */}
-      <TouchableOpacity style={styles.card} onPress={onUpgrade} activeOpacity={0.75}>
-        <View style={styles.cardIcon}>
+      <TouchableOpacity style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]} onPress={onUpgrade} activeOpacity={0.75}>
+        <View style={[styles.cardIcon, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <IcWeek />
         </View>
         <View style={styles.cardMain}>
           <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle}>The week ahead</Text>
-            <PremiumPill accent={v.accent} />
+            <Text style={[styles.cardTitle, { color: textPrimary }]}>The week ahead</Text>
+            <PremiumPill accent={nightVision ? NV_TEXT : v.accent} />
           </View>
-          <Text style={styles.cardSub}>See clear nights up to 7 days out</Text>
+          <Text style={[styles.cardSub, { color: textDim }]}>See clear nights up to 7 days out</Text>
         </View>
-        <WeekPreview scores={weekScores} accent={v.accent} />
+        <WeekPreview scores={weekScores} accent={nightVision ? NV_TEXT : v.accent} />
       </TouchableOpacity>
 
       {/* Card 2 — Never miss a GO (accent) */}
-      <View style={[styles.card, styles.cardAccent, { backgroundColor: v.accentSoft, borderColor: v.accent }]}>
-        <View style={[styles.cardIcon, styles.cardIconAccent]}>
+      <View style={[styles.card, styles.cardAccent, { backgroundColor: nightVision ? NV_CARD : v.accentSoft, borderColor: nightVision ? NV_BORDER : v.accent }]}>
+        <View style={[styles.cardIcon, styles.cardIconAccent, { borderColor: cardBorder }]}>
           <IcAlert />
         </View>
         <View style={styles.cardMain}>
-          <Text style={styles.cardTitle}>Never miss a GO</Text>
-          <Text style={styles.cardSub}>Get a push the moment tonight turns clear</Text>
+          <Text style={[styles.cardTitle, { color: textPrimary }]}>Never miss a GO</Text>
+          <Text style={[styles.cardSub, { color: textDim }]}>Get a push the moment tonight turns clear</Text>
         </View>
         <TouchableOpacity
-          style={[styles.ctaBtn, { backgroundColor: v.accent }]}
+          style={[styles.ctaBtn, { backgroundColor: nightVision ? NV_TEXT : v.accent }]}
           onPress={onUpgrade}
           activeOpacity={0.8}
         >

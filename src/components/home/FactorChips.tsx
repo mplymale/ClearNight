@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { DayForecast } from '../../data/mockForecast';
-import { useNightVision, NV_BORDER, NV_CARD } from '../../context/NightVisionContext';
+import { useNightVision, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM } from '../../context/NightVisionContext';
 
 interface ChipItem {
   key: string;
@@ -21,6 +21,8 @@ export function FactorChips({ day, locIndex, dayIndex }: Props) {
   const { nightVision } = useNightVision();
   const chipBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.12)';
   const chipBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.06)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
   const items: ChipItem[] = [
     { key: 'cloud',  label: 'Cloud',   value: day.cloud,   unit: '%'  },
     { key: 'moon',   label: 'Moon',    value: day.moon,    unit: '%'  },
@@ -37,11 +39,11 @@ export function FactorChips({ day, locIndex, dayIndex }: Props) {
           activeOpacity={0.7}
           onPress={() => router.push({ pathname: '/factor-detail', params: { factor: it.key, locIndex: String(locIndex), dayIndex: String(dayIndex) } })}
         >
-          <Text style={styles.chipVal}>
+          <Text style={[styles.chipVal, { color: textPrimary }]}>
             {it.value}
             <Text style={styles.chipUnit}>{it.unit}</Text>
           </Text>
-          <Text style={styles.chipLabel}>{it.label}</Text>
+          <Text style={[styles.chipLabel, { color: textDim }]}>{it.label}</Text>
         </TouchableOpacity>
       ))}
     </View>

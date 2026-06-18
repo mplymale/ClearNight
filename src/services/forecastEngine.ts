@@ -104,6 +104,8 @@ export async function buildRealForecast(lat: number, lon: number, bortle: number
       clearBy,
       primeDark,
       hourly,
+      duskMs: bounds.duskUtcMs,
+      dawnMs: bounds.dawnUtcMs,
     };
     days.push(day);
 

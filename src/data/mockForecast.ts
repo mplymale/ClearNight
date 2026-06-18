@@ -21,6 +21,8 @@ export interface DayForecast {
   clearBy: string;
   primeDark: string;
   hourly: number[];
+  duskMs: number;
+  dawnMs: number;
 }
 
 export interface AltPoint { label: string; alt: number; }
@@ -41,8 +43,10 @@ export interface SkyObject {
   dirLabel: string;
   dirDeg: number;
   altCurve: AltPoint[];
+  // Sky coordinates — stored so object-detail can recompute for other nights
+  raHours?: number;
+  decDeg?: number;
   // Which onboarding interest this object matches, for auto-favoriting.
-  // Optional since hand-authored mock objects don't set it.
   category?: 'deep' | 'planets' | 'meteors';
 }
 
@@ -57,6 +61,8 @@ export interface PrimeTarget {
   peakTime: string;
   transit: string;
   altCurve: AltPoint[];
+  raHours?: number;
+  decDeg?: number;
 }
 
 export interface Location {
@@ -113,6 +119,8 @@ function mkLoc(
         clearBy,
         primeDark,
         hourly: genHourly(score, i + name.length),
+        duskMs: 0,
+        dawnMs: 0,
       };
     }),
   };

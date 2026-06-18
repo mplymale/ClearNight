@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { Verdict } from '../../constants/verdicts';
 import { DayForecast, Location } from '../../data/mockForecast';
-import { useNightVision, NV_ACCENT } from '../../context/NightVisionContext';
+import { useNightVision, NV_ACCENT, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../../context/NightVisionContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
 
 // Arc geometry — matches prototype exactly
@@ -36,6 +36,10 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
   const { use24h } = usePreferences();
   const fmt = (s: string) => applyTimeFormat(s, use24h);
   const accent = nightVision ? NV_ACCENT : v.accent;
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)';
+  const capColor = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.65)';
   const hasWin = !freeMode && !!day.window;
   const winEndpoints = hasWin && day.window
     ? [day.window.s, day.window.e].map((f) => polar(f))
@@ -96,43 +100,43 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
 
       {/* Dusk label — bottom left */}
       <View style={[styles.arcEnd, styles.arcEndLeft]}>
-        <Text style={styles.arcEndTime}>{fmt(loc.dusk)}</Text>
-        <Text style={styles.arcEndLabel}>dusk</Text>
+        <Text style={[styles.arcEndTime, { color: textPrimary }]}>{fmt(loc.dusk)}</Text>
+        <Text style={[styles.arcEndLabel, { color: textFaint }]}>dusk</Text>
       </View>
 
       {/* Dawn label — bottom right */}
       <View style={[styles.arcEnd, styles.arcEndRight]}>
-        <Text style={[styles.arcEndTime, { textAlign: 'right' }]}>{fmt(loc.dawn)}</Text>
-        <Text style={[styles.arcEndLabel, { textAlign: 'right' }]}>dawn</Text>
+        <Text style={[styles.arcEndTime, { textAlign: 'right', color: textPrimary }]}>{fmt(loc.dawn)}</Text>
+        <Text style={[styles.arcEndLabel, { textAlign: 'right', color: textFaint }]}>dawn</Text>
       </View>
 
       {/* Center overlay */}
       <View style={styles.arcCenter} pointerEvents="none">
         {freeMode ? (
           <>
-            <Text style={[styles.arcCap, { color: 'rgba(255,255,255,0.65)' }]}>
+            <Text style={[styles.arcCap, { color: capColor }]}>
               {v.label} TONIGHT
             </Text>
-            <Text style={styles.arcWinTime}>{v.word}</Text>
-            <Text style={styles.arcSub}>
+            <Text style={[styles.arcWinTime, { color: textPrimary }]}>{v.word}</Text>
+            <Text style={[styles.arcSub, { color: textDim }]}>
               over {loc.name} · {day.cloud}% cloud
             </Text>
           </>
         ) : hasWin && day.window ? (
           <>
-            <Text style={[styles.arcCap, { color: 'rgba(255,255,255,0.65)' }]}>
+            <Text style={[styles.arcCap, { color: capColor }]}>
               {v.label} · BEST WINDOW
             </Text>
-            <Text style={styles.arcWinTime}>{fmt(day.window.label)}</Text>
-            <Text style={styles.arcSub}>
+            <Text style={[styles.arcWinTime, { color: textPrimary }]}>{fmt(day.window.label)}</Text>
+            <Text style={[styles.arcSub, { color: textDim }]}>
               {day.primeDark} of prime darkness · clear by {fmt(day.clearBy)}
             </Text>
           </>
         ) : (
           <>
-            <Text style={[styles.arcCap, { color: 'rgba(255,255,255,0.65)' }]}>{v.label}</Text>
-            <Text style={styles.arcWinTime}>No window</Text>
-            <Text style={styles.arcSub}>
+            <Text style={[styles.arcCap, { color: capColor }]}>{v.label}</Text>
+            <Text style={[styles.arcWinTime, { color: textPrimary }]}>No window</Text>
+            <Text style={[styles.arcSub, { color: textDim }]}>
               {day.cloud}% cloud · {v.word.toLowerCase()} sky tonight
             </Text>
           </>

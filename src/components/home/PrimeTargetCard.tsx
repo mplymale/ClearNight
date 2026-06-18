@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 import { Verdict } from '../../constants/verdicts';
 import { DayForecast, Location } from '../../data/mockForecast';
-import { useNightVision, NV_ACCENT, NV_ACCENT_SOFT, NV_BORDER, NV_CARD } from '../../context/NightVisionContext';
+import { useNightVision, NV_ACCENT, NV_ACCENT_SOFT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../../context/NightVisionContext';
 import { useFavorites, favoritedObjectIndices } from '../../context/FavoritesContext';
 import { useInterests } from '../../context/InterestsContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
@@ -63,7 +63,12 @@ interface TargetCardProps {
 // fallback and each row in the favorited list below.
 function TargetCard({ eyebrow, display, accent, cardBorder, cardBg, clouded, cloudPct, onPress }: TargetCardProps) {
   const { use24h } = usePreferences();
+  const { nightVision } = useNightVision();
   const fmt = (s: string) => applyTimeFormat(s, use24h);
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
+  const textMeta = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.72)';
+  const textDir = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.7)';
   return (
     <TouchableOpacity
       style={[styles.card, { borderColor: cardBorder, backgroundColor: cardBg }]}
@@ -72,11 +77,11 @@ function TargetCard({ eyebrow, display, accent, cardBorder, cardBg, clouded, clo
     >
       {clouded ? (
         <View style={styles.main}>
-          <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={[styles.name, { color: 'rgba(255,255,255,0.55)' }]}>
+          <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
+          <Text style={[styles.name, { color: nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.55)' }]}>
             Clouded out
           </Text>
-          <Text style={styles.sub}>
+          <Text style={[styles.sub, { color: textDim }]}>
             {display.name} hidden behind {cloudPct}% cloud
           </Text>
         </View>
@@ -84,19 +89,31 @@ function TargetCard({ eyebrow, display, accent, cardBorder, cardBg, clouded, clo
         <>
           <View style={styles.main}>
             <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
-            <Text style={styles.name}>{display.name}</Text>
-            <Text style={styles.sub}>{display.sub}</Text>
-            <Text style={styles.meta}>
+            <Text style={[styles.name, { color: textPrimary }]}>{display.name}</Text>
+            <Text style={[styles.sub, { color: textDim }]}>{display.sub}</Text>
+            <Text style={[styles.meta, { color: textMeta }]}>
               Visible{' '}
-              <Text style={styles.metaBold}>{fmt(display.visible)}</Text>
+              <Text style={[styles.metaBold, { color: textPrimary }]}>{fmt(display.visible)}</Text>
             </Text>
           </View>
           <View style={styles.compass}>
             <Compass deg={display.dirDeg} accent={accent} />
-            <Text style={styles.dir}>{display.dir.split(' ')[0]}</Text>
+            <Text style={[styles.dir, { color: textDir }]}>{display.dir.split(' ')[0]}</Text>
           </View>
         </>
       )}
+    </TouchableOpacity>
+  );
+}
+
+function BrowseLink({ accent, locIndex }: { accent: string; locIndex: number }) {
+  return (
+    <TouchableOpacity
+      style={styles.browseLink}
+      activeOpacity={0.7}
+      onPress={() => router.push({ pathname: '/tonights-targets', params: { locIndex: String(locIndex) } })}
+    >
+      <Text style={[styles.browseLinkText, { color: accent }]}>+ Tonight's Targets</Text>
     </TouchableOpacity>
   );
 }
@@ -163,10 +180,11 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
   if (interests.planets && !hasCategory('planets')) emptyNotes.push('No planets visible from here tonight.');
   if (interests.meteors && !hasCategory('meteors')) emptyNotes.push('No active meteor showers in your area tonight.');
 
+  const noteColor = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
   const EmptyNotes = emptyNotes.length > 0 ? (
     <View style={styles.notesWrap}>
       {emptyNotes.map((note) => (
-        <Text key={note} style={styles.noteText}>{note}</Text>
+        <Text key={note} style={[styles.noteText, { color: noteColor }]}>{note}</Text>
       ))}
     </View>
   ) : null;
@@ -193,15 +211,13 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
           onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
         />
         {EmptyNotes}
+        <BrowseLink accent={accent} locIndex={locIndex} />
       </View>
     );
   }
 
   return (
     <View style={styles.list}>
-      {/* The prime target (often the galactic core) only shows up here when
-          it was explicitly starred — otherwise it's just the no-favorites
-          fallback above, which doesn't apply once anything else is starred. */}
       {primeFavorited && (
         <TargetCard
           eyebrow="YOUR PICK"
@@ -244,6 +260,7 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
         );
       })}
       {EmptyNotes}
+      <BrowseLink accent={accent} locIndex={locIndex} />
     </View>
   );
 }
@@ -252,6 +269,16 @@ const styles = StyleSheet.create({
   list: {
     gap: 12,
     marginTop: 20,
+  },
+  browseLink: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  browseLinkText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 13,
+    fontWeight: '500',
   },
   notesWrap: {
     gap: 6,

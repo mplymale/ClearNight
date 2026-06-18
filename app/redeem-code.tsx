@@ -66,7 +66,7 @@ export default function RedeemCodeScreen() {
 
           <Text style={styles.heading}>Have an offer code?</Text>
           <Text style={styles.sub}>
-            Tap below to open the App Store and enter your promotional or gift code to unlock StarCast Premium.
+            Tap below to open the App Store and enter your promotional or gift code to unlock ClearNight Premium.
           </Text>
 
           <TouchableOpacity
@@ -97,8 +97,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 8,
   },
-  navBack: { flexDirection: 'row', alignItems: 'center', minWidth: 80, gap: 2 },
-  navBackChev: { fontSize: 20, lineHeight: 24 },
+  navBack: { flexDirection: 'row', alignItems: 'center', minWidth: 80, gap: 6 },
+  navBackChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
   navBackLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15 },
   navTitle: {
     flex: 1,

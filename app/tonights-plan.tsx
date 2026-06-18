@@ -1,10 +1,11 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePlan } from '../src/context/PlanContext';
-import { AppLogo } from '../src/components/common/AppLogo';
 import { CheckIcon } from '../src/components/common/CheckIcon';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
+
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
 import { Location } from '../src/data/mockForecast';
@@ -79,6 +80,14 @@ export default function TonightsPlanScreen() {
   const { plan, removeFromPlan, captured, toggleCaptured } = usePlan();
   const { locations } = useLocations();
   const { use24h } = usePreferences();
+  const { nightVision } = useNightVision();
+  const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
+  const containerBg = nightVision ? '#150400' : '#0a0d14';
+  const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
+  const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.10)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.35)';
   const fmt = (s: string) => applyTimeFormat(s, use24h);
 
   const resolved = Array.from(plan)
@@ -101,26 +110,29 @@ export default function TonightsPlanScreen() {
 
   const overallWindow = parseWindowBounds(items.map((i) => i.window));
   // Use the accent from the first item (or default teal)
-  const headerAccent = items[0]?.accent ?? '#7ef0d2';
+  const headerAccent = nightVision ? NV_ACCENT : (items[0]?.accent ?? '#7ef0d2');
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: containerBg }]}>
       {/* Nav bar */}
       <View style={styles.nav}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={styles.backChev}>‹</Text>
-          <Text style={styles.backLabel}>Home</Text>
+          <Text style={[styles.backChev, { color: nvAccent }]}>‹</Text>
+          <Text style={[styles.backLabel, { color: nvAccent }]}>Home</Text>
         </TouchableOpacity>
-        <Text style={styles.navTitle}>Tonight's Plan</Text>
+        <Text style={[styles.navTitle, { color: textPrimary }]}>Tonight's Plan</Text>
         <View style={styles.navRight} />
       </View>
 
       {items.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <AppLogo size={64} animate={false} />
+          <View style={styles.emptyIconWrap}>
+            <Image
+              source={require('../assets/clearnight-icon.png')}
+              style={{ width: 148, height: 148, borderRadius: 33 }}
+            />
           </View>
-          <Text style={styles.emptyTitle}>No targets yet</Text>
+          <Text style={[styles.emptyTitle, { color: textPrimary }]}>No targets yet</Text>
           <Text style={styles.emptyBody}>
             Open a target from tonight's sky and tap{'\n'}
             <Text style={styles.emptyBold}>Add to plan</Text>
@@ -136,7 +148,7 @@ export default function TonightsPlanScreen() {
           <View style={styles.countRow}>
             <View style={styles.countLeft}>
               <Text style={[styles.countNum, { color: headerAccent }]}>{items.length}</Text>
-              <Text style={styles.countLabel}>targets queued</Text>
+              <Text style={[styles.countLabel, { color: textDim }]}>targets queued</Text>
             </View>
             {overallWindow ? (
               <Text style={styles.overallWindow}>{overallWindow}</Text>
@@ -149,7 +161,7 @@ export default function TonightsPlanScreen() {
             return (
               <TouchableOpacity
                 key={item.key}
-                style={[styles.card, expiredItem && styles.cardExpired]}
+                style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }, expiredItem && styles.cardExpired]}
                 activeOpacity={0.8}
                 onPress={() =>
                   router.push({
@@ -171,13 +183,13 @@ export default function TonightsPlanScreen() {
                 >
                   {done
                     ? <CheckIcon size={14} color={item.accent} strokeWidth={2.8} />
-                    : <Text style={styles.numText}>{idx + 1}</Text>
+                    : <Text style={[styles.numText, { color: textDim }]}>{idx + 1}</Text>
                   }
                 </TouchableOpacity>
 
                 <View style={styles.cardText}>
-                  <Text style={[styles.cardName, done && styles.cardNameDone]}>{item.name}</Text>
-                  <Text style={styles.cardSub}>{item.sub}</Text>
+                  <Text style={[styles.cardName, { color: textPrimary }, done && styles.cardNameDone]}>{item.name}</Text>
+                  <Text style={[styles.cardSub, { color: textDim }]}>{item.sub}</Text>
                   <Text style={[styles.cardWindow, { color: item.accent }]}>
                     {fmt(item.window)}{expiredItem ? ' · closed' : ''}
                   </Text>
@@ -188,7 +200,7 @@ export default function TonightsPlanScreen() {
                   onPress={() => removeFromPlan(item.key)}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
-                  <Text style={styles.removeBtnText}>✕</Text>
+                  <Text style={[styles.removeBtnText, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.3)' }]}>✕</Text>
                 </TouchableOpacity>
               </TouchableOpacity>
             );
@@ -213,14 +225,13 @@ const styles = StyleSheet.create({
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 6,
     minWidth: 70,
   },
   backChev: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 22,
-    lineHeight: 26,
-    color: '#7ef0d2',
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 28,
+    lineHeight: 32,
   },
   backLabel: {
     fontFamily: 'HankenGrotesk_500Medium',
@@ -346,17 +357,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 36,
     marginBottom: 60,
   },
-  emptyIcon: {
-    width: 90,
-    height: 90,
-    borderRadius: 24,
-    backgroundColor: 'rgba(15,22,30,1)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(126,240,210,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 22,
-    overflow: 'hidden',
+  emptyIconWrap: {
+    marginBottom: 28,
   },
   emptyTitle: {
     fontFamily: 'SpaceGrotesk_600SemiBold',

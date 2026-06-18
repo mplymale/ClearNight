@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useSubscription } from '../src/context/SubscriptionContext';
@@ -90,8 +90,22 @@ const FEATURES: { icon: React.ReactNode; text: string }[] = [
 
 // ── Success state ─────────────────────────────────────────────────────────────
 
-function SuccessView() {
+function SuccessView({ returnTo, locIndex, type, objIndex }: {
+  returnTo?: string;
+  locIndex?: string;
+  type?: string;
+  objIndex?: string;
+}) {
   const insets = useSafeAreaInsets();
+
+  function handleContinue() {
+    if (returnTo === 'object-detail') {
+      router.replace({ pathname: '/object-detail', params: { locIndex, type, objIndex } });
+    } else {
+      router.replace('/(tabs)');
+    }
+  }
+
   return (
     <LinearGradient colors={['#04060e', '#061510', '#081f18']} style={styles.container}>
       <View style={[styles.successWrap, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 32 }]}>
@@ -100,9 +114,9 @@ function SuccessView() {
         </View>
         <Text style={styles.successTitle}>You're all set</Text>
         <Text style={styles.successBody}>
-          StarCast Premium is unlocked. Every spot, the full week, and GO alerts the moment your sky clears.
+          ClearNight Premium is unlocked. Every spot, the full week, and GO alerts the moment your sky clears.
         </Text>
-        <TouchableOpacity style={[styles.ctaBtn, { maxWidth: 280, alignSelf: 'center', width: '100%', marginTop: 0 }]} onPress={() => router.replace('/(tabs)')} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.ctaBtn, { maxWidth: 280, alignSelf: 'center', width: '100%', marginTop: 0 }]} onPress={handleContinue} activeOpacity={0.85}>
           <Text style={styles.ctaBtnText}>Start exploring</Text>
         </TouchableOpacity>
       </View>
@@ -115,10 +129,16 @@ function SuccessView() {
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const { setStatus } = useSubscription();
+  const { returnTo, locIndex, type, objIndex } = useLocalSearchParams<{
+    returnTo?: string;
+    locIndex?: string;
+    type?: string;
+    objIndex?: string;
+  }>();
   const [plan, setPlan] = useState<'annual' | 'monthly' | 'lifetime'>('annual');
   const [done, setDone] = useState(false);
 
-  if (done) return <SuccessView />;
+  if (done) return <SuccessView returnTo={returnTo} locIndex={locIndex} type={type} objIndex={objIndex} />;
 
   const sel = PLANS.find((p) => p.id === plan)!;
   const ctaLabel = plan === 'lifetime'
@@ -146,7 +166,7 @@ export default function PaywallScreen() {
         {/* Hero */}
         <View style={styles.hero}>
           <AppLogo size={90} />
-          <Text style={styles.kicker}>StarCast Premium</Text>
+          <Text style={styles.kicker}>ClearNight Premium</Text>
           <Text style={styles.heroTitle}>Never miss a clear night</Text>
           <Text style={styles.heroSub}>
             Plan ahead, chase every GO window, and get a nudge the moment the sky opens up.

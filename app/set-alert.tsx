@@ -7,8 +7,7 @@ import { useLocations } from '../src/context/LocationsContext';
 import { useAlerts, AlertPreference } from '../src/context/AlertsContext';
 import { usePreferences } from '../src/context/PreferencesContext';
 import { ensureNotificationPermission, parseWindowStartDate } from '../src/services/alertScheduling';
-
-const ACCENT = '#7ef0d2';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 
 const NIGHTS_OPTIONS: { key: AlertPreference['nightsMode']; label: string }[] = [
   { key: 'any', label: 'Any clear night' },
@@ -31,6 +30,14 @@ export default function SetAlertScreen() {
   }>();
   const { locations } = useLocations();
   const { quietStart, quietEnd } = usePreferences();
+  const { nightVision } = useNightVision();
+  const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
+  const containerBg = nightVision ? '#150400' : '#080b12';
+  const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
+  const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.10)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.65)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
   const { setMultiAlert, getAlert } = useAlerts();
 
   const loc = locations[Number(locIndex) ?? 0];
@@ -118,7 +125,7 @@ export default function SetAlertScreen() {
             quietEnd,
           };
         })
-        .filter((f): f is { title: string; body: string; fireDate: Date } => f !== null && f.fireDate.getTime() > Date.now());
+        .filter((f): f is { title: string; body: string; fireDate: Date; quietStart: number; quietEnd: number } => f !== null && f.fireDate.getTime() > Date.now());
 
       const preference: AlertPreference = {
         threshold,
@@ -139,13 +146,14 @@ export default function SetAlertScreen() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: containerBg }]}>
       {/* Nav */}
       <View style={styles.nav}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.cancelBtn}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} style={styles.backBtn}>
+          <Text style={[styles.backChev, { color: nvAccent }]}>‹</Text>
+          <Text style={[styles.backLabel, { color: nvAccent }]}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.navTitle}>Set Alert</Text>
+        <Text style={[styles.navTitle, { color: textPrimary }]}>Set Alert</Text>
         <View style={styles.navRight} />
       </View>
 
@@ -153,30 +161,30 @@ export default function SetAlertScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.eyebrow}>NOTIFY ME ABOUT</Text>
-        <Text style={styles.objectName}>{objectName}</Text>
+        <Text style={[styles.eyebrow, { color: nvAccent }]}>NOTIFY ME ABOUT</Text>
+        <Text style={[styles.objectName, { color: textPrimary }]}>{objectName}</Text>
 
         {/* Threshold picker */}
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Alert me on</Text>
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+          <Text style={[styles.cardLabel, { color: textPrimary }]}>Alert me on</Text>
           <View style={{ marginTop: 14 }}>
-            <ThreshPreset value={threshold} onChange={setThreshold} accent={ACCENT} />
+            <ThreshPreset value={threshold} onChange={setThreshold} accent={nvAccent} />
           </View>
         </View>
 
         {/* Which nights */}
-        <Text style={styles.sectionLabel}>WHICH NIGHTS</Text>
+        <Text style={[styles.sectionLabel, { color: textFaint }]}>WHICH NIGHTS</Text>
         <View style={styles.pillRow}>
           {NIGHTS_OPTIONS.map((opt) => {
             const selected = nightsMode === opt.key;
             return (
               <TouchableOpacity
                 key={opt.key}
-                style={[styles.pill, selected && styles.pillSelected]}
+                style={[styles.pill, { borderColor: cardBorder, backgroundColor: cardBg }, selected && { borderColor: nvAccent, backgroundColor: nightVision ? 'rgba(224,120,48,0.10)' : 'rgba(126,240,210,0.10)' }]}
                 activeOpacity={0.8}
                 onPress={() => setNightsMode(opt.key)}
               >
-                <Text style={[styles.pillText, selected && { color: ACCENT }]}>{opt.label}</Text>
+                <Text style={[styles.pillText, { color: textDim }, selected && { color: nvAccent }]}>{opt.label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -189,11 +197,11 @@ export default function SetAlertScreen() {
               return (
                 <TouchableOpacity
                   key={i}
-                  style={[styles.dayChip, selected && styles.dayChipSelected]}
+                  style={[styles.dayChip, { borderColor: cardBorder, backgroundColor: cardBg }, selected && { borderColor: nvAccent, backgroundColor: nightVision ? 'rgba(224,120,48,0.10)' : 'rgba(126,240,210,0.10)' }]}
                   activeOpacity={0.8}
                   onPress={() => togglePickedDay(i)}
                 >
-                  <Text style={[styles.dayChipText, selected && { color: ACCENT }]}>
+                  <Text style={[styles.dayChipText, { color: textDim }, selected && { color: nvAccent }]}>
                     {i === 0 ? 'Now' : d.day}
                   </Text>
                 </TouchableOpacity>
@@ -203,25 +211,25 @@ export default function SetAlertScreen() {
         )}
 
         {/* When to ping me */}
-        <Text style={styles.sectionLabel}>WHEN TO PING ME</Text>
-        <View style={styles.segWrap}>
+        <Text style={[styles.sectionLabel, { color: textFaint }]}>WHEN TO PING ME</Text>
+        <View style={[styles.segWrap, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           {TIMING_OPTIONS.map((opt) => {
             const selected = timing === opt.key;
             return (
               <TouchableOpacity
                 key={opt.key}
-                style={[styles.segBtn, selected && { backgroundColor: ACCENT }]}
+                style={[styles.segBtn, selected && { backgroundColor: nvAccent }]}
                 activeOpacity={0.8}
                 onPress={() => setTiming(opt.key)}
               >
-                <Text style={[styles.segBtnText, selected && { color: '#04130f' }]}>{opt.label}</Text>
+                <Text style={[styles.segBtnText, { color: textDim }, selected && { color: '#04130f' }]}>{opt.label}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
         <TouchableOpacity
-          style={[styles.setBtn, saving && { opacity: 0.6 }]}
+          style={[styles.setBtn, { backgroundColor: nvAccent }, saving && { opacity: 0.6 }]}
           activeOpacity={0.85}
           onPress={handleSetAlert}
           disabled={saving}
@@ -245,12 +253,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
   },
-  cancelBtn: { minWidth: 70 },
-  cancelText: {
-    fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
-  },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 70 },
+  backChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
+  backLabel: { fontFamily: 'HankenGrotesk_500Medium', fontSize: 15 },
   navTitle: {
     flex: 1,
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -270,7 +275,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1.5,
-    color: ACCENT,
+    color: '#7ef0d2',
     marginTop: 12,
   },
   objectName: {
@@ -321,7 +326,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
   },
   pillSelected: {
-    borderColor: ACCENT,
+    borderColor: '#7ef0d2',
     backgroundColor: 'rgba(126,240,210,0.10)',
   },
   pillText: {
@@ -347,7 +352,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   dayChipSelected: {
-    borderColor: ACCENT,
+    borderColor: '#7ef0d2',
     backgroundColor: 'rgba(126,240,210,0.10)',
   },
   dayChipText: {
@@ -381,7 +386,7 @@ const styles = StyleSheet.create({
 
   setBtn: {
     borderRadius: 999,
-    backgroundColor: ACCENT,
+    backgroundColor: '#7ef0d2',
     paddingVertical: 17,
     alignItems: 'center',
   },

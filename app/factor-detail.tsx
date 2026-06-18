@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
+import { useNightVision, NV_ACCENT, NV_BORDER, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import type { Location, DayForecast } from '../src/data/mockForecast';
 
 const SCREEN_H = Dimensions.get('window').height;
@@ -92,28 +93,41 @@ function BortleScale({ bortle, accent }: { bortle: number; accent: string }) {
 
 // ── 6-night bar chart ─────────────────────────────────────────────────────────
 
+// Maps a 0–1 quality score: blue (best) → teal → red (worst)
+function qualityColor(q: number): string {
+  if (q >= 0.7) return '#8fd0ff'; // excellent — blue
+  if (q >= 0.4) return '#7ef0d2'; // good — teal
+  return '#e07878';               // poor — red
+}
+
 function NightBars({
   days,
   getValue,
-  accent,
+  getQuality,
   selectedIndex,
+  caption,
 }: {
   days: DayForecast[];
-  getValue: (d: DayForecast) => number; // 0–1 normalized
-  accent: string;
+  getValue: (d: DayForecast) => number;
+  getQuality: (d: DayForecast) => number;
   selectedIndex: number;
+  caption?: string;
 }) {
   const labels = days.map((d, i) => (i === 0 ? 'Now' : d.day));
   const BAR_MAX_H = 120;
 
   return (
     <View style={styles.barsSection}>
-      <Text style={styles.barsLabel}>ACROSS THE NEXT 6 NIGHTS</Text>
+      <View style={styles.barsLabelRow}>
+        <Text style={styles.barsLabel}>ACROSS THE NEXT 6 NIGHTS</Text>
+        {caption && <Text style={styles.barsCaption}>{caption}</Text>}
+      </View>
       <View style={styles.bars}>
         {days.map((d, i) => {
           const pct = Math.max(0.04, getValue(d));
           const h = pct * BAR_MAX_H;
           const isSelected = i === selectedIndex;
+          const barColor = qualityColor(getQuality(d));
           return (
             <View key={i} style={styles.barCol}>
               <View style={styles.barTrack}>
@@ -122,7 +136,8 @@ function NightBars({
                     styles.bar,
                     {
                       height: h,
-                      backgroundColor: isSelected ? accent : 'rgba(255,255,255,0.12)',
+                      backgroundColor: barColor,
+                      opacity: isSelected ? 1 : 0.3,
                     },
                   ]}
                 />
@@ -158,6 +173,8 @@ function getContent(
         ? 'Significant cloud cover — observing will be interrupted frequently.'
         : 'Heavy overcast — observing not recommended tonight.',
       getValue: (d: typeof day) => d.cloud / 100,
+      getQuality: (d: typeof day) => 1 - d.cloud / 100,
+      caption: 'lower = clearer skies',
     };
 
     case 'moon': return {
@@ -176,6 +193,8 @@ function getContent(
         ? 'Bright moon will wash out most deep-sky targets tonight.'
         : 'Near-full moon — stick to the Moon itself, planets, and bright clusters.',
       getValue: (d: typeof day) => d.moon / 100,
+      getQuality: (d: typeof day) => 1 - d.moon / 100,
+      caption: 'lower = thinner moon = better',
     };
 
     case 'seeing': return {
@@ -192,6 +211,8 @@ function getContent(
         ? 'Average seeing — moderate detail on planets and double stars.'
         : 'Turbulent air — stick to wide-field and low-power views tonight.',
       getValue: (d: typeof day) => d.seeingN / 5,
+      getQuality: (d: typeof day) => d.seeingN / 5,
+      caption: 'higher = steadier air = better',
     };
 
     case 'bortle': return {
@@ -205,6 +226,8 @@ function getContent(
         ? 'Suburban skies — bright Messier objects are visible, faint ones are tough.'
         : 'Heavy light pollution — only the brightest objects are accessible.',
       getValue: (d: typeof day) => (10 - d.bortle) / 9,
+      getQuality: (d: typeof day) => (10 - d.bortle) / 9,
+      caption: undefined,
     };
 
     default: return {
@@ -212,6 +235,8 @@ function getContent(
       valueLine: null,
       description: '',
       getValue: () => 0,
+      getQuality: () => 0,
+      caption: undefined,
     };
   }
 }
@@ -227,12 +252,18 @@ export default function FactorDetailScreen() {
   }>();
 
   const { locations } = useLocations();
+  const { nightVision } = useNightVision();
   const loc = locations[Number(locIndex ?? 0)];
   const selectedDayIndex = Number(dayIndex ?? 0);
-  const day = loc.days[selectedDayIndex];
-  const accent = VERDICTS[day.verdict].accent;
+  const tonight = loc.days[0]; // header/description always show tonight
+  const accent = nightVision ? NV_ACCENT : VERDICTS[tonight.verdict].accent;
+  const sheetBg = nightVision ? '#1a0400' : '#0e1420';
+  const handleBg = nightVision ? NV_BORDER : 'rgba(255,255,255,0.22)';
+  const textPrimary = nightVision ? NV_TEXT : '#fff';
+  const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
+  const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.35)';
 
-  const { title, valueLine, description, getValue } = getContent(factor, loc, day, accent);
+  const { title, valueLine, description, getValue, getQuality, caption } = getContent(factor, loc, tonight, accent);
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -242,26 +273,26 @@ export default function FactorDetailScreen() {
       </TouchableOpacity>
 
       {/* Sheet anchored to bottom */}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24 }]}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24, backgroundColor: sheetBg }]}>
         {/* Handle */}
-        <View style={styles.handle} />
+        <View style={[styles.handle, { backgroundColor: handleBg }]} />
 
         {/* Header row */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>{title}</Text>
+          <Text style={[styles.headerTitle, { color: textPrimary }]}>{title}</Text>
           {valueLine}
         </View>
 
         {/* Description */}
-        <Text style={styles.description}>{description}</Text>
+        <Text style={[styles.description, { color: textDim }]}>{description}</Text>
 
         {/* Bortle is fixed per location — show where it falls on the 1–9
             scale instead of a 6-night bar chart of identical bars. Every
             other factor genuinely varies night to night, so keep those. */}
         {factor === 'bortle' ? (
-          <BortleScale bortle={day.bortle} accent={accent} />
+          <BortleScale bortle={tonight.bortle} accent={accent} />
         ) : (
-          <NightBars days={loc.days} getValue={getValue} accent={accent} selectedIndex={selectedDayIndex} />
+          <NightBars days={loc.days} getValue={getValue} getQuality={getQuality} selectedIndex={selectedDayIndex} caption={caption} />
         )}
       </View>
     </View>
@@ -401,13 +432,24 @@ const styles = StyleSheet.create({
   barsSection: {
     flex: 1,
   },
+  barsLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   barsLabel: {
     fontFamily: 'HankenGrotesk_400Regular',
     fontSize: 10,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: 'rgba(255,255,255,0.35)',
-    marginBottom: 16,
+  },
+  barsCaption: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.3)',
+    fontStyle: 'italic',
   },
   bars: {
     flexDirection: 'row',

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "StarCast",
-    "slug": "StarCast",
-    "scheme": "starcast",
+    "name": "ClearNight",
+    "slug": "ClearNight",
+    "scheme": "clearnight",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "StarCast uses your location to show local dark-sky conditions and nearby stargazing spots."
+        "NSLocationWhenInUseUsageDescription": "ClearNight uses your location to show local dark-sky conditions and nearby stargazing spots."
       }
     },
     "android": {
@@ -31,7 +31,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "StarCast uses your location to show local dark-sky conditions and nearby stargazing spots."
+          "locationWhenInUsePermission": "ClearNight uses your location to show local dark-sky conditions and nearby stargazing spots."
         }
       ]
     ]
