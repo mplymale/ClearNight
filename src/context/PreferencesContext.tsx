@@ -6,6 +6,7 @@ const STORAGE_KEY = 'clearnight:preferences';
 interface Preferences {
   use24h: boolean;
   useCelsius: boolean;
+  useKnots: boolean;
   quietStart: number; // hour 0-23, e.g. 23 = 11pm
   quietEnd: number;   // hour 0-23, e.g. 7 = 7am
 }
@@ -13,6 +14,7 @@ interface Preferences {
 interface PreferencesCtx extends Preferences {
   setUse24h: (v: boolean) => void;
   setUseCelsius: (v: boolean) => void;
+  setUseKnots: (v: boolean) => void;
   setQuietStart: (h: number) => void;
   setQuietEnd: (h: number) => void;
 }
@@ -20,10 +22,12 @@ interface PreferencesCtx extends Preferences {
 const PreferencesContext = createContext<PreferencesCtx>({
   use24h: false,
   useCelsius: false,
+  useKnots: false,
   quietStart: 23,
   quietEnd: 7,
   setUse24h: () => {},
   setUseCelsius: () => {},
+  setUseKnots: () => {},
   setQuietStart: () => {},
   setQuietEnd: () => {},
 });
@@ -31,6 +35,7 @@ const PreferencesContext = createContext<PreferencesCtx>({
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const [use24h, setUse24hState] = useState(false);
   const [useCelsius, setUseCelsiusState] = useState(false);
+  const [useKnots, setUseKnotsState] = useState(false);
   const [quietStart, setQuietStartState] = useState(23);
   const [quietEnd, setQuietEndState] = useState(7);
   const [hydrated, setHydrated] = useState(false);
@@ -43,6 +48,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
           const parsed = JSON.parse(saved);
           if (typeof parsed.use24h === 'boolean') setUse24hState(parsed.use24h);
           if (typeof parsed.useCelsius === 'boolean') setUseCelsiusState(parsed.useCelsius);
+          if (typeof parsed.useKnots === 'boolean') setUseKnotsState(parsed.useKnots);
           if (typeof parsed.quietStart === 'number') setQuietStartState(parsed.quietStart);
           if (typeof parsed.quietEnd === 'number') setQuietEndState(parsed.quietEnd);
         }
@@ -53,17 +59,19 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!hydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ use24h, useCelsius, quietStart, quietEnd })).catch(() => {});
-  }, [use24h, useCelsius, quietStart, quietEnd, hydrated]);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ use24h, useCelsius, useKnots, quietStart, quietEnd })).catch(() => {});
+  }, [use24h, useCelsius, useKnots, quietStart, quietEnd, hydrated]);
 
   return (
     <PreferencesContext.Provider value={{
       use24h,
       useCelsius,
+      useKnots,
       quietStart,
       quietEnd,
       setUse24h: setUse24hState,
       setUseCelsius: setUseCelsiusState,
+      setUseKnots: setUseKnotsState,
       setQuietStart: setQuietStartState,
       setQuietEnd: setQuietEndState,
     }}>
@@ -126,4 +134,20 @@ export function applyTempFormat(fahrenheit: number, useCelsius: boolean): string
     return `${Math.round((fahrenheit - 32) * 5 / 9)}°C`;
   }
   return `${Math.round(fahrenheit)}°F`;
+}
+
+// Open-Meteo returns wind in km/h. Convert to mph or knots for display.
+export function applyWindFormat(kmh: number, useKnots: boolean): { value: number; unit: string } {
+  if (useKnots) return { value: Math.round(kmh * 0.539957), unit: 'kts' };
+  return { value: Math.round(kmh * 0.621371), unit: 'mph' };
+}
+
+// Astro-relevant wind label based on mph (used internally regardless of display unit).
+export function windLabel(kmh: number): string {
+  const mph = kmh * 0.621371;
+  if (mph <= 5)  return 'Calm';
+  if (mph <= 12) return 'Light';
+  if (mph <= 20) return 'Breezy';
+  if (mph <= 30) return 'Windy';
+  return 'Gusty';
 }

@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { DayForecast, Location } from '../../data/mockForecast';
@@ -66,9 +67,17 @@ function clarityColor(pct: number): string {
 }
 
 const QUALITY_COLOR: Record<string, string> = {
-  Excellent: '#7ef0d2',
-  Good: '#8fd0ff',
-  Mediocre: 'rgba(255,255,255,0.5)',
+  Excellent: '#8fd0ff',
+  Good: '#7ef0d2',
+  Mediocre: '#e8c55a',
+  Poor: '#e07060',
+};
+
+const QUALITY_COLOR_NV: Record<string, string> = {
+  Excellent: '#e07830',
+  Good: '#c86428',
+  Mediocre: '#a04820',
+  Poor: '#7a2c14',
 };
 
 const HOURS = ['9p', '10', '11', '12', '1a', '2', '3', '4', '5'];
@@ -182,7 +191,7 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
             onPress={() => (open ? closeSheet() : openSheet())}
             activeOpacity={0.8}
           >
-            <Text style={[styles.headerTitle, { color: textPrimary }]}>Tonight's sky</Text>
+            <Text style={[styles.headerTitleText, { color: textPrimary }]}>Tonight's sky</Text>
             <View style={styles.headerChevAbs}>
               <HeaderChevron open={open} />
             </View>
@@ -203,14 +212,13 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
               <Text style={[styles.sectionLabel, { color: textSection }]}>Hour-by-hour · Tonight</Text>
               <View style={styles.legend}>
                 <Text style={[styles.legendText, { color: textFaint }]}>Poor</Text>
-                <View style={styles.legendRamp}>
-                  {[0, 1, 2, 3, 4, 5, 6].map(i => (
-                    <View
-                      key={i}
-                      style={[styles.legendSeg, { backgroundColor: clarityColor((i / 6) * 100) }]}
-                    />
-                  ))}
-                </View>
+                <LinearGradient
+                  colors={STOPS.map(([, [r, g, b]]) => `rgb(${r},${g},${b})`) as [string, string, ...string[]]}
+                  locations={STOPS.map(([pct]) => pct / 100) as [number, number, ...number[]]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.legendRamp}
+                />
                 <Text style={[styles.legendText, { color: textFaint }]}>Great</Text>
               </View>
             </View>
@@ -254,7 +262,7 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
             <View style={styles.visSectionHead}>
               <Text style={[styles.sectionLabel, { color: textSection }]}>Visible Tonight</Text>
               <Text style={[styles.visSeeAll, { color: textFaint }]}>
-                {loc.objects.length + (loc.prime.peakAlt > 0 ? 1 : 0)} up · see all ›
+                {loc.objects.length + (loc.prime.peakAlt > 0 ? 1 : 0)} targets
               </Text>
             </View>
 
@@ -279,26 +287,41 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
               </TouchableOpacity>
             )}
 
-            {loc.objects.map((obj, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[styles.objCard, { borderColor: cardBorder, backgroundColor: cardBg }]}
-                activeOpacity={0.7}
-                onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'object', objIndex: String(i) } })}
-              >
-                <View style={styles.objMain}>
-                  <Text style={[styles.objName, { color: textPrimary }]}>{obj.name}</Text>
-                  <Text style={[styles.objId, { color: textDim }]}>{obj.cat} · {obj.con}</Text>
-                  <Text style={[styles.objStats, { color: textFaint }]}>{obj.type} · Mag {obj.mag} · {obj.size}</Text>
-                </View>
-                <View style={styles.objRight}>
-                  <Text style={[styles.objQuality, { color: QUALITY_COLOR[obj.quality] ?? textPrimary }]}>
-                    {obj.quality}
-                  </Text>
-                  <Text style={[styles.objChev, { color: textFaint }]}>›</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {loc.objects.map((obj, i) => {
+              const qColors = nightVision ? QUALITY_COLOR_NV : QUALITY_COLOR;
+              const qColor = qColors[obj.quality] ?? textDim;
+              const mag = typeof obj.mag === 'number' ? Number(obj.mag).toFixed(1) : obj.mag;
+              const idLine = [obj.cat, obj.con].filter(Boolean).join(' · ');
+              const statsLine = [obj.type, `Mag ${mag}`, obj.size !== '—' ? obj.size : null].filter(Boolean).join(' · ');
+              return (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.objCard, { borderColor: cardBorder, backgroundColor: cardBg }]}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'object', objIndex: String(i) } })}
+                >
+                  <View style={styles.objMain}>
+                    <Text style={[styles.objName, { color: textPrimary }]}>{obj.name}</Text>
+                    <Text style={[styles.objId, { color: textDim }]}>{idLine}</Text>
+                    <Text style={[styles.objStats, { color: textFaint }]}>{statsLine}</Text>
+                  </View>
+                  <View style={styles.objRight}>
+                    <Text style={[styles.objQuality, { color: qColor }]}>{obj.quality}</Text>
+                    <Text style={[styles.objChev, { color: textFaint }]}>›</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            {loc.objects.length === 0 && loc.prime.peakAlt <= 0 && (
+              <View style={[styles.emptyState, { borderColor: cardBorder, backgroundColor: cardBg }]}>
+                <Text style={[styles.emptyIcon, { color: textFaint }]}>☁</Text>
+                <Text style={[styles.emptyTitle, { color: textPrimary }]}>Nothing clears the horizon tonight</Text>
+                <Text style={[styles.emptyBody, { color: textFaint }]}>
+                  Clouds or geometry are keeping the sky closed. Check back tomorrow or try a darker location.
+                </Text>
+              </View>
+            )}
 
             <View style={{ height: 40 }} />
           </ScrollView>
@@ -352,7 +375,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerTitle: {
+  headerTitleText: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 16,
     fontWeight: '600',
@@ -531,6 +554,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.2,
+  },
+  emptyState: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 22,
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  emptyIcon: {
+    fontSize: 28,
+    marginBottom: 2,
+  },
+  emptyTitle: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  emptyBody: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: 'center',
+    maxWidth: 260,
   },
   objChev: {
     fontSize: 16,

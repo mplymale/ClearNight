@@ -19,6 +19,7 @@ import { FavoritesProvider } from '../src/context/FavoritesContext';
 import { InterestsProvider } from '../src/context/InterestsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { PreferencesProvider } from '../src/context/PreferencesContext';
+import { AuthProvider } from '../src/context/AuthContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,6 +40,7 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
+    <AuthProvider>
     <NightVisionProvider>
       <LocationsProvider>
       <PlanProvider>
@@ -49,12 +51,13 @@ export default function RootLayout() {
       <PreferencesProvider>
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="intro" options={{ animation: 'fade', gestureEnabled: false, contentStyle: { backgroundColor: '#04060e' } }} />
+          <Stack.Screen name="onboarding" options={{ animation: 'fade', contentStyle: { backgroundColor: '#04060e' } }} />
+          <Stack.Screen name="(tabs)" options={{ animation: 'fade', contentStyle: { backgroundColor: '#04060e' } }} />
           <Stack.Screen name="settings" />
           <Stack.Screen name="tonights-plan" />
           <Stack.Screen name="object-detail" />
-          <Stack.Screen name="factor-detail" options={{ presentation: 'transparentModal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="factor-detail" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="manage-locations" />
           <Stack.Screen name="add-location" options={{ presentation: 'modal' }} />
           <Stack.Screen name="set-alert" options={{ presentation: 'modal' }} />
@@ -72,6 +75,7 @@ export default function RootLayout() {
       </PlanProvider>
       </LocationsProvider>
     </NightVisionProvider>
+    </AuthProvider>
   );
 }
 

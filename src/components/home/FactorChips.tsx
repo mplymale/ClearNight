@@ -3,13 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { DayForecast } from '../../data/mockForecast';
 import { useNightVision, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM } from '../../context/NightVisionContext';
-
-interface ChipItem {
-  key: string;
-  label: string;
-  value: number;
-  unit: string;
-}
+import { usePreferences, applyWindFormat, windLabel } from '../../context/PreferencesContext';
 
 interface Props {
   day: DayForecast;
@@ -19,20 +13,24 @@ interface Props {
 
 export function FactorChips({ day, locIndex, dayIndex }: Props) {
   const { nightVision } = useNightVision();
+  const { useKnots } = usePreferences();
   const chipBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.12)';
   const chipBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.06)';
   const textPrimary = nightVision ? NV_TEXT : '#fff';
   const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
-  const items: ChipItem[] = [
-    { key: 'cloud',  label: 'Cloud',   value: day.cloud,   unit: '%'  },
-    { key: 'moon',   label: 'Moon',    value: day.moon,    unit: '%'  },
-    { key: 'seeing', label: 'Seeing',  value: day.seeingN, unit: '/5' },
-    { key: 'bortle', label: 'Bortle',  value: day.bortle,  unit: ''   },
+
+  const wind = applyWindFormat(day.windKmh ?? 0, useKnots);
+  const wLabel = windLabel(day.windKmh ?? 0);
+
+  const standardChips = [
+    { key: 'cloud',  label: 'Cloud',   val: `${day.cloud}%`,        sub: null },
+    { key: 'seeing', label: 'Seeing',  val: `${day.seeingN}`,       sub: '/5' },
+    { key: 'bortle', label: 'Bortle',  val: `${day.bortle}`,        sub: null },
   ];
 
   return (
     <View style={styles.chips}>
-      {items.map((it) => (
+      {standardChips.map((it) => (
         <TouchableOpacity
           key={it.key}
           style={[styles.chip, { borderColor: chipBorder, backgroundColor: chipBg }]}
@@ -40,12 +38,25 @@ export function FactorChips({ day, locIndex, dayIndex }: Props) {
           onPress={() => router.push({ pathname: '/factor-detail', params: { factor: it.key, locIndex: String(locIndex), dayIndex: String(dayIndex) } })}
         >
           <Text style={[styles.chipVal, { color: textPrimary }]}>
-            {it.value}
-            <Text style={styles.chipUnit}>{it.unit}</Text>
+            {it.val}
+            {it.sub && <Text style={styles.chipUnit}>{it.sub}</Text>}
           </Text>
           <Text style={[styles.chipLabel, { color: textDim }]}>{it.label}</Text>
         </TouchableOpacity>
       ))}
+
+      {/* Wind chip */}
+      <TouchableOpacity
+        style={[styles.chip, { borderColor: chipBorder, backgroundColor: chipBg }]}
+        activeOpacity={0.7}
+        onPress={() => router.push({ pathname: '/factor-detail', params: { factor: 'wind', locIndex: String(locIndex), dayIndex: String(dayIndex) } })}
+      >
+        <Text style={[styles.chipVal, { color: textPrimary }]}>
+          {wind.value}
+          <Text style={styles.chipUnit}> {wind.unit}</Text>
+        </Text>
+        <Text style={[styles.chipLabel, { color: textDim }]}>Wind</Text>
+      </TouchableOpacity>
     </View>
   );
 }

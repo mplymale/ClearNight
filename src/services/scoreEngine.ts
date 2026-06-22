@@ -6,6 +6,8 @@ export interface HourPoint {
   utcMs: number;
   cloudPct: number;
   score: number; // 0-100
+  humidity?: number;
+  wind?: number;
 }
 
 const WEIGHTS = {

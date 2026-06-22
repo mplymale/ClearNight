@@ -1,13 +1,7 @@
 import { Redirect } from 'expo-router';
-import { useLocations } from '../src/context/LocationsContext';
 
+// Always show the intro animation first — it handles routing to onboarding
+// or home based on launch count and whether spots are saved.
 export default function Root() {
-  const { locations, hydrated } = useLocations();
-
-  // Wait for the persisted state to load before deciding where to send the
-  // user — redirecting too early would always show onboarding, even for
-  // returning users who already have spots saved.
-  if (!hydrated) return null;
-
-  return <Redirect href={locations.length > 0 ? '/(tabs)' : '/onboarding'} />;
+  return <Redirect href="/intro" />;
 }

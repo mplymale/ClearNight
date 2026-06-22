@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocations } from '../src/context/LocationsContext';
+import { useFavorites } from '../src/context/FavoritesContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
@@ -55,11 +56,28 @@ interface SearchResult {
   region: string;
   latitude: number;
   longitude: number;
+  isDarkSky?: boolean;
+}
+
+function searchDarkSkyPlaces(q: string): SearchResult[] {
+  const lower = q.toLowerCase();
+  return DARK_SKY_PLACES
+    .filter(p => p.name.toLowerCase().includes(lower) || p.state.toLowerCase().includes(lower))
+    .slice(0, 3)
+    .map(p => ({
+      key: `dsp-${p.name}`,
+      city: p.name,
+      region: p.state,
+      latitude: p.lat,
+      longitude: p.lon,
+      isDarkSky: true,
+    }));
 }
 
 export default function AddLocationScreen() {
   const insets = useSafeAreaInsets();
   const { addLocation, locations, activeLocIndex } = useLocations();
+  const { addFavorite } = useFavorites();
   const { status } = useSubscription();
   const { nightVision } = useNightVision();
   const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
@@ -73,6 +91,7 @@ export default function AddLocationScreen() {
   const hasLocation = locations.length > 0;
   const [query, setQuery] = useState('');
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsDenied, setGpsDenied] = useState(false);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -135,6 +154,9 @@ export default function AddLocationScreen() {
     const mySeq = ++searchSeq.current;
     const timer = setTimeout(async () => {
       try {
+        // Dark sky places search is instant — no network call needed.
+        const darkSkyResults = searchDarkSkyPlaces(q);
+
         const matches = await Location.geocodeAsync(q);
         if (searchSeq.current !== mySeq) return;
 
@@ -156,8 +178,8 @@ export default function AddLocationScreen() {
         );
         if (searchSeq.current !== mySeq) return;
 
-        const seen = new Set<string>();
-        const unique = resolved.filter((r): r is SearchResult => {
+        const seen = new Set<string>(darkSkyResults.map(r => `${r.city}|${r.region}`));
+        const cityResults = resolved.filter((r): r is SearchResult => {
           if (!r) return false;
           const k = `${r.city}|${r.region}`;
           if (seen.has(k)) return false;
@@ -165,8 +187,9 @@ export default function AddLocationScreen() {
           return true;
         });
 
-        setResults(unique);
-        if (unique.length === 0) setSearchError('No matches found.');
+        const combined = [...darkSkyResults, ...cityResults];
+        setResults(combined);
+        if (combined.length === 0) setSearchError('No matches found.');
       } catch {
         if (searchSeq.current === mySeq) setSearchError('Search failed. Check your connection.');
       } finally {
@@ -182,7 +205,7 @@ export default function AddLocationScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission denied', 'Location access is needed to use your current position.');
+        setGpsDenied(true);
         setGpsLoading(false);
         return;
       }
@@ -198,7 +221,9 @@ export default function AddLocationScreen() {
       const estimatedBortle = estimateBortle(pos.coords.latitude, pos.coords.longitude);
 
       const loc = mkLocFromPlace(city, region, estimatedBortle, pos.coords.latitude, pos.coords.longitude);
+      const newIdx = locations.length;
       addLocation(loc);
+      addFavorite(`${newIdx}-prime-prime`);
       router.back();
     } catch (e) {
       Alert.alert('Error', 'Could not get your location. Please try again.');
@@ -214,7 +239,9 @@ export default function AddLocationScreen() {
       return;
     }
     const loc = mkLocFromPlace(place.name, place.state, place.bortle, place.lat, place.lon);
+    const newIdx = locations.length;
     addLocation(loc);
+    addFavorite(`${newIdx}-prime-prime`);
     router.back();
   }
 
@@ -225,7 +252,9 @@ export default function AddLocationScreen() {
       return;
     }
     const loc = mkLocFromPlace(r.city, r.region, estimateBortle(r.latitude, r.longitude), r.latitude, r.longitude);
+    const newIdx = locations.length;
     addLocation(loc);
+    addFavorite(`${newIdx}-prime-prime`);
     router.back();
   }
 
@@ -263,24 +292,36 @@ export default function AddLocationScreen() {
         </View>
 
         {/* Use current location */}
-        <TouchableOpacity
-          style={[styles.gpsRow, { backgroundColor: cardBg, borderColor: cardBorder }]}
-          onPress={isFree && hasLocation ? () => router.push('/paywall') : handleUseLocation}
-          activeOpacity={0.8}
-          disabled={gpsLoading}
-        >
-          <View style={[styles.gpsIconWrap, nightVision && { backgroundColor: 'rgba(224,120,48,0.12)' }]}>
-            {gpsLoading
-              ? <ActivityIndicator size="small" color={nvAccent} />
-              : <GpsIcon color={nvAccent} />
-            }
+        {gpsDenied ? (
+          <View style={[styles.gpsRow, { backgroundColor: cardBg, borderColor: cardBorder, opacity: 0.55 }]}>
+            <View style={[styles.gpsIconWrap, nightVision && { backgroundColor: 'rgba(224,120,48,0.12)' }]}>
+              <GpsIcon color={textFaint} />
+            </View>
+            <View style={styles.gpsMain}>
+              <Text style={[styles.gpsTitle, { color: textDim }]}>Location access denied</Text>
+              <Text style={[styles.gpsSub, { color: textFaint }]}>Search for a city below to add a spot</Text>
+            </View>
           </View>
-          <View style={styles.gpsMain}>
-            <Text style={[styles.gpsTitle, { color: textPrimary }]}>Use my current location</Text>
-            <Text style={[styles.gpsSub, { color: textDim }]}>GPS · most accurate</Text>
-          </View>
-          {!gpsLoading && <Text style={[styles.gpsChev, { color: nvAccent }]}>›</Text>}
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.gpsRow, { backgroundColor: cardBg, borderColor: cardBorder }]}
+            onPress={isFree && hasLocation ? () => router.push('/paywall') : handleUseLocation}
+            activeOpacity={0.8}
+            disabled={gpsLoading}
+          >
+            <View style={[styles.gpsIconWrap, nightVision && { backgroundColor: 'rgba(224,120,48,0.12)' }]}>
+              {gpsLoading
+                ? <ActivityIndicator size="small" color={nvAccent} />
+                : <GpsIcon color={nvAccent} />
+              }
+            </View>
+            <View style={styles.gpsMain}>
+              <Text style={[styles.gpsTitle, { color: textPrimary }]}>Use my current location</Text>
+              <Text style={[styles.gpsSub, { color: textDim }]}>GPS · most accurate</Text>
+            </View>
+            {!gpsLoading && <Text style={[styles.gpsChev, { color: nvAccent }]}>›</Text>}
+          </TouchableOpacity>
+        )}
 
         {/* Free tier: upgrade banner for multiple spots */}
         {isFree && hasLocation && (
@@ -312,7 +353,14 @@ export default function AddLocationScreen() {
                         <MoonIcon color={nvAccent} />
                       </View>
                       <View style={styles.placeMain}>
-                        <Text style={[styles.placeName, { color: textPrimary }]}>{r.city}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Text style={[styles.placeName, { color: textPrimary }]}>{r.city}</Text>
+                          {r.isDarkSky && (
+                            <View style={[styles.darkSkyBadge, { borderColor: `${nvAccent}60` }]}>
+                              <Text style={[styles.darkSkyBadgeText, { color: nvAccent }]}>★ Dark Sky</Text>
+                            </View>
+                          )}
+                        </View>
                         <Text style={[styles.placeMeta, { color: textDim }]}>
                           {r.region}{distMi !== null ? ` · ${formatMiles(distMi)}` : ''}
                         </Text>
@@ -543,6 +591,16 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: 'rgba(255,255,255,0.5)',
     marginTop: 2,
+  },
+  darkSkyBadge: {
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  darkSkyBadgeText: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 10,
   },
   placeBortle: {
     fontFamily: 'SpaceGrotesk_600SemiBold',

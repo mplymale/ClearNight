@@ -41,7 +41,7 @@ function resolvePlanKey(key: string, locations: Location[]) {
     return {
       key,
       name: obj.name,
-      sub: `${obj.type} · ${obj.con}`,
+      sub: [obj.type, obj.con].filter(Boolean).join(' · '),
       window: obj.window,
       accent: verdict.accent,
       locIndex,

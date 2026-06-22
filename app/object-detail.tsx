@@ -24,9 +24,10 @@ import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV
 // Object visibility quality has its own color scale, independent of the
 // night's overall verdict accent (used elsewhere on this screen).
 const QUALITY_COLOR: Record<string, string> = {
-  Excellent: '#7ef0d2',
-  Good: '#8fd0ff',
-  Mediocre: 'rgba(255,255,255,0.55)',
+  Excellent: '#8fd0ff',
+  Good: '#7ef0d2',
+  Mediocre: '#e8c55a',
+  Poor: '#e07060',
 };
 
 // ── Altitude chart ────────────────────────────────────────────────────────────

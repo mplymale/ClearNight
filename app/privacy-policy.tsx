@@ -52,11 +52,11 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="Push Notifications">
-          If you enable alerts, we schedule notifications locally on your device. No location data is sent to external servers to generate these alerts.
+          If you enable alerts, your device push token is securely stored on our servers to deliver timely sky condition notifications. You can disable notifications at any time in your device settings.
         </Section>
 
-        <Section title="Data Retention">
-          All forecast preferences and location data are stored locally on your device. You can delete this data at any time by uninstalling the app.
+        <Section title="Data Storage">
+          {"Your saved locations and alert preferences are stored securely on our servers (Supabase) linked to an anonymous account, so your data is restored if you reinstall the app. No personally identifiable information is required to create this account.\n\nYou can delete your data at any time by contacting us at info@strangeglyph.com."}
         </Section>
 
         <Section title="Children's Privacy">
@@ -68,7 +68,7 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="Contact Us">
-          If you have questions about this Privacy Policy, please contact us at privacy@clearnightapp.com
+          If you have questions about this Privacy Policy, please contact us at info@strangeglyph.com
         </Section>
       </ScrollView>
     </LinearGradient>

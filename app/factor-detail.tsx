@@ -1,16 +1,16 @@
 import React from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
+import { usePreferences, applyWindFormat, windLabel } from '../src/context/PreferencesContext';
 import type { Location, DayForecast } from '../src/data/mockForecast';
 
-const SCREEN_H = Dimensions.get('window').height;
-const SHEET_H = Math.round(SCREEN_H * 0.54);
 
 // ── Bortle scale strip — class is fixed per location, so a 6-night bar
 // chart of identical bars is meaningless. Show where it falls on 1–9 instead.
@@ -43,27 +43,24 @@ function BortleScale({ bortle, accent }: { bortle: number; accent: string }) {
     <View style={styles.bortleSection}>
       <Text style={styles.barsLabel}>WHERE THIS FALLS ON THE SCALE</Text>
 
-      <View style={styles.bortleBarWrap}>
-        <Svg width="100%" height={BAR_H} viewBox="0 0 300 14">
-          <Defs>
-            <LinearGradient id="bortleGrad" x1="0" y1="0" x2="1" y2="0">
-              {BORTLE_STOPS.map(([offset, color], i) => (
-                <Stop key={i} offset={offset} stopColor={color} />
-              ))}
-            </LinearGradient>
-          </Defs>
-          <Rect x={0} y={0} width={300} height={14} rx={7} fill="url(#bortleGrad)" />
-        </Svg>
+      <View style={{ height: 14 }} />
 
-        {/* Marker pinpointing this location's class */}
-        <View
-          style={[
-            styles.bortleMarker,
-            { left: `${t * 100}%` },
-          ]}
-        >
-          <View style={[styles.bortleMarkerDot, { borderColor: accent }]} />
-        </View>
+      <View style={styles.bortleBarWrap}>
+        {/* Gradient bar as a View so it fills container edge-to-edge with real borderRadius */}
+        <LinearGradient
+          colors={BORTLE_STOPS.map(([, color]) => color) as [string, string, ...string[]]}
+          locations={BORTLE_STOPS.map(([offset]) => offset) as [number, number, ...number[]]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.bortleBar}
+        />
+        {/* Star overlaid via SVG — viewBox 0-300 maps to the same width as the bar */}
+        <Svg style={StyleSheet.absoluteFill} viewBox="0 0 300 34" preserveAspectRatio="none">
+          <Path
+            d={`M${t * 300},${17 - 10} C${t * 300 + 1.5},${17 - 3} ${t * 300 + 3},${17 - 1.5} ${t * 300 + 10},${17} C${t * 300 + 3},${17 + 1.5} ${t * 300 + 1.5},${17 + 3} ${t * 300},${17 + 10} C${t * 300 - 1.5},${17 + 3} ${t * 300 - 3},${17 + 1.5} ${t * 300 - 10},${17} C${t * 300 - 3},${17 - 1.5} ${t * 300 - 1.5},${17 - 3} ${t * 300},${17 - 10} Z`}
+            fill="#ffffff"
+          />
+        </Svg>
       </View>
 
       <View style={styles.bortleEndLabels}>
@@ -82,7 +79,6 @@ function BortleScale({ bortle, accent }: { bortle: number; accent: string }) {
               <Text style={[styles.bortleLegendName, isSelected && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
                 {BORTLE_CLASS_NAMES[cls]}
               </Text>
-              {isSelected && <Text style={[styles.bortleLegendHere, { color: accent }]}>this spot</Text>}
             </View>
           );
         })}
@@ -100,21 +96,32 @@ function qualityColor(q: number): string {
   return '#e07878';               // poor — red
 }
 
+const TICKS = [
+  { pct: 1.0, label: 'High' },
+  { pct: 0.5, label: 'Mid' },
+  { pct: 0.0, label: 'Low' },
+];
+
 function NightBars({
   days,
   getValue,
   getQuality,
   selectedIndex,
   caption,
+  tickLabels,
 }: {
   days: DayForecast[];
   getValue: (d: DayForecast) => number;
   getQuality: (d: DayForecast) => number;
   selectedIndex: number;
   caption?: string;
+  tickLabels?: [string, string, string]; // top, mid, bottom
 }) {
   const labels = days.map((d, i) => (i === 0 ? 'Now' : d.day));
   const BAR_MAX_H = 120;
+  const ticks = tickLabels
+    ? TICKS.map((t, i) => ({ ...t, label: tickLabels[i] }))
+    : TICKS;
 
   return (
     <View style={styles.barsSection}>
@@ -122,32 +129,48 @@ function NightBars({
         <Text style={styles.barsLabel}>ACROSS THE NEXT 6 NIGHTS</Text>
         {caption && <Text style={styles.barsCaption}>{caption}</Text>}
       </View>
-      <View style={styles.bars}>
-        {days.map((d, i) => {
-          const pct = Math.max(0.04, getValue(d));
-          const h = pct * BAR_MAX_H;
-          const isSelected = i === selectedIndex;
-          const barColor = qualityColor(getQuality(d));
-          return (
-            <View key={i} style={styles.barCol}>
-              <View style={styles.barTrack}>
-                <View
-                  style={[
-                    styles.bar,
-                    {
-                      height: h,
-                      backgroundColor: barColor,
-                      opacity: isSelected ? 1 : 0.3,
-                    },
-                  ]}
-                />
+      <View style={styles.barsChartRow}>
+        {/* Y-axis ticks — yAxis is taller than BAR_MAX_H to give the top label room */}
+        <View style={[styles.yAxis, { height: BAR_MAX_H + 14 }]}>
+          {ticks.map(({ pct, label }) => {
+            // Heavy sits 14px above bar top (the extra headroom); Clear sits at bar floor (14px up from view bottom)
+            const bottom = 14 + pct * BAR_MAX_H;
+            return (
+              <View key={label} style={[styles.tickRow, { bottom }]}>
+                <Text style={styles.tickLabel}>{label}</Text>
+                <View style={styles.tickMark} />
               </View>
-              <Text style={[styles.barDay, isSelected && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
-                {labels[i]}
-              </Text>
-            </View>
-          );
-        })}
+            );
+          })}
+        </View>
+        {/* Bars */}
+        <View style={styles.bars}>
+          {days.map((d, i) => {
+            const pct = Math.max(0.04, getValue(d));
+            const h = pct * BAR_MAX_H;
+            const isSelected = i === selectedIndex;
+            const barColor = qualityColor(getQuality(d));
+            return (
+              <View key={i} style={styles.barCol}>
+                <View style={styles.barTrack}>
+                  <View
+                    style={[
+                      styles.bar,
+                      {
+                        height: h,
+                        backgroundColor: barColor,
+                        opacity: isSelected ? 1 : 0.3,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.barDay, isSelected && { color: '#fff', fontFamily: 'HankenGrotesk_600SemiBold' }]}>
+                  {labels[i]}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
     </View>
   );
@@ -160,6 +183,7 @@ function getContent(
   loc: Location,
   day: DayForecast,
   accent: string,
+  useKnots: boolean,
 ) {
   switch (factor) {
     case 'cloud': return {
@@ -175,27 +199,32 @@ function getContent(
       getValue: (d: typeof day) => d.cloud / 100,
       getQuality: (d: typeof day) => 1 - d.cloud / 100,
       caption: 'lower = clearer skies',
+      tickLabels: ['Heavy', 'Partial', 'Clear'] as [string, string, string],
     };
 
-    case 'moon': return {
-      title: 'Moonlight',
-      valueLine: (
-        <Text style={[styles.headerValue, { color: accent }]}>
-          {day.moon}%{' '}
-          <Text style={styles.headerValueSub}>· {day.moonPhase}</Text>
-        </Text>
-      ),
-      description: day.moon < 20
-        ? 'A thin moon means a properly dark sky for faint deep-sky objects.'
-        : day.moon < 50
-        ? 'Moderate moonlight — bright DSOs are fine, faint ones will suffer.'
-        : day.moon < 80
-        ? 'Bright moon will wash out most deep-sky targets tonight.'
-        : 'Near-full moon — stick to the Moon itself, planets, and bright clusters.',
-      getValue: (d: typeof day) => d.moon / 100,
-      getQuality: (d: typeof day) => 1 - d.moon / 100,
-      caption: 'lower = thinner moon = better',
-    };
+    case 'moon': {
+      const dark = 100 - day.moon;
+      return {
+        title: 'Moon darkness',
+        valueLine: (
+          <Text style={[styles.headerValue, { color: accent }]}>
+            {dark}% dark{' '}
+            <Text style={styles.headerValueSub}>· {day.moonPhase}</Text>
+          </Text>
+        ),
+        description: dark >= 80
+          ? 'Near-new moon — the sky is properly dark for faint deep-sky objects and the Milky Way.'
+          : dark >= 50
+          ? 'Mostly dark sky — bright DSOs and the Milky Way core are fine; faint targets may suffer a little.'
+          : dark >= 20
+          ? 'Bright moon will wash out most deep-sky targets tonight. Stick to clusters and bright nebulae.'
+          : 'Near-full moon — best spent observing the Moon itself, planets, and bright double stars.',
+        getValue: (d: DayForecast) => 1 - d.moon / 100,
+        getQuality: (d: DayForecast) => 1 - d.moon / 100,
+        caption: 'higher = darker sky = better',
+        tickLabels: ['Fully dark', '50% dark', 'Full moon'] as [string, string, string],
+      };
+    }
 
     case 'seeing': return {
       title: 'Seeing',
@@ -213,6 +242,7 @@ function getContent(
       getValue: (d: typeof day) => d.seeingN / 5,
       getQuality: (d: typeof day) => d.seeingN / 5,
       caption: 'higher = steadier air = better',
+      tickLabels: ['5/5', '3/5', '1/5'] as [string, string, string],
     };
 
     case 'bortle': return {
@@ -229,6 +259,51 @@ function getContent(
       getQuality: (d: typeof day) => (10 - d.bortle) / 9,
       caption: undefined,
     };
+
+    case 'wind': {
+      const wind = applyWindFormat(day.windKmh ?? 0, useKnots);
+      const label = windLabel(day.windKmh ?? 0);
+      return {
+        title: label,
+        valueLine: (
+          <Text style={[styles.headerValue, { color: accent }]}>
+            {wind.value} {wind.unit}
+          </Text>
+        ),
+        description: label === 'Calm'
+          ? 'Near-still air — perfect for long exposures and high-magnification work. Scope will hold steady all night.'
+          : label === 'Light'
+          ? 'Light breeze with minimal impact on observing. Long exposures should be fine; scope is stable.'
+          : label === 'Breezy'
+          ? 'Moderate wind may cause occasional scope vibration. Keep exposures shorter and avoid high magnification.'
+          : label === 'Windy'
+          ? 'Strong wind will degrade seeing and shake the scope. Wide-field only; imaging will be difficult.'
+          : 'Gusty conditions — not worth setting up. Wind will ruin exposures and make observing uncomfortable.',
+        getValue: (d: DayForecast) => Math.min(1, (d.windKmh ?? 0) / 60),
+        getQuality: (d: DayForecast) => Math.max(0, 1 - (d.windKmh ?? 0) / 60),
+        caption: 'lower = calmer = better',
+        tickLabels: ['Gusty', 'Breezy', 'Calm'] as [string, string, string],
+      };
+    }
+
+    case 'humidity': {
+      const h = day.humidity ?? 0;
+      return {
+        title: 'Humidity',
+        valueLine: <Text style={[styles.headerValue, { color: accent }]}>{h}%</Text>,
+        description: h < 40
+          ? 'Dry air tonight — excellent transparency and no risk of dew forming on your optics.'
+          : h < 60
+          ? 'Moderate humidity. Atmospheric clarity is good; dew is unlikely but worth monitoring on longer sessions.'
+          : h < 80
+          ? 'High humidity will reduce transparency and haze out faint targets. Dew heaters recommended if you have them.'
+          : 'Very high humidity — expect dew on optics and hazy skies. Transparency will be poor for deep-sky work.',
+        getValue: (d: DayForecast) => (d.humidity ?? 0) / 100,
+        getQuality: (d: DayForecast) => 1 - (d.humidity ?? 0) / 100,
+        caption: 'lower = drier = better',
+        tickLabels: ['100%', '50%', '0%'] as [string, string, string],
+      };
+    }
 
     default: return {
       title: factor,
@@ -253,6 +328,7 @@ export default function FactorDetailScreen() {
 
   const { locations } = useLocations();
   const { nightVision } = useNightVision();
+  const { useKnots } = usePreferences();
   const loc = locations[Number(locIndex ?? 0)];
   const selectedDayIndex = Number(dayIndex ?? 0);
   const tonight = loc.days[0]; // header/description always show tonight
@@ -263,7 +339,7 @@ export default function FactorDetailScreen() {
   const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
   const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.35)';
 
-  const { title, valueLine, description, getValue, getQuality, caption } = getContent(factor, loc, tonight, accent);
+  const { title, valueLine, description, getValue, getQuality, caption, tickLabels } = getContent(factor, loc, tonight, accent, useKnots) as ReturnType<typeof getContent> & { tickLabels?: [string, string, string] };
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -292,7 +368,7 @@ export default function FactorDetailScreen() {
         {factor === 'bortle' ? (
           <BortleScale bortle={tonight.bortle} accent={accent} />
         ) : (
-          <NightBars days={loc.days} getValue={getValue} getQuality={getQuality} selectedIndex={selectedDayIndex} caption={caption} />
+          <NightBars days={loc.days} getValue={getValue} getQuality={getQuality} selectedIndex={selectedDayIndex} caption={caption} tickLabels={tickLabels} />
         )}
       </View>
     </View>
@@ -303,11 +379,7 @@ export default function FactorDetailScreen() {
 
 const styles = StyleSheet.create({
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: SHEET_H,
+    ...StyleSheet.absoluteFillObject,
   },
 
   sheet: {
@@ -315,7 +387,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: SHEET_H,
     backgroundColor: '#0e1420',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -374,21 +445,15 @@ const styles = StyleSheet.create({
   bortleBarWrap: {
     position: 'relative',
     marginBottom: 10,
-    paddingHorizontal: 2,
+    height: 34,
   },
-  bortleMarker: {
+  bortleBar: {
     position: 'absolute',
-    top: -3,
-    marginLeft: -10,
-    width: 20,
-    alignItems: 'center',
-  },
-  bortleMarkerDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#0e1420',
-    borderWidth: 3,
+    top: 10,
+    bottom: 10,
+    left: 0,
+    right: 0,
+    borderRadius: 7,
   },
   bortleEndLabels: {
     flexDirection: 'row',
@@ -432,11 +497,39 @@ const styles = StyleSheet.create({
   barsSection: {
     flex: 1,
   },
+  barsChartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  yAxis: {
+    position: 'relative',
+    width: 36,
+    flexShrink: 0,
+  },
+  tickRow: {
+    position: 'absolute',
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  tickLabel: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.28)',
+    textAlign: 'right',
+  },
+  tickMark: {
+    width: 4,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
   barsLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 28,
   },
   barsLabel: {
     fontFamily: 'HankenGrotesk_400Regular',
@@ -456,6 +549,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 8,
     flex: 1,
+    height: 120 + 14,
   },
   barCol: {
     flex: 1,

@@ -56,7 +56,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="Intellectual Property">
-          All content, features, and functionality of ClearNight — including but not limited to text, graphics, logos, and software — are the exclusive property of ClearNight LLC and are protected by intellectual property laws.
+          All content, features, and functionality of ClearNight — including but not limited to text, graphics, logos, and software — are the exclusive property of Strange Glyph, LLC and are protected by intellectual property laws.
         </Section>
 
         <Section title="Disclaimer of Warranties">
@@ -64,7 +64,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="Limitation of Liability">
-          To the maximum extent permitted by law, ClearNight LLC shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the app.
+          To the maximum extent permitted by law, Strange Glyph, LLC shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of the app.
         </Section>
 
         <Section title="Changes to Terms">
@@ -72,7 +72,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="Contact">
-          Questions about these Terms? Contact us at legal@clearnightapp.com
+          Questions about these Terms? Contact us at info@strangeglyph.com
         </Section>
       </ScrollView>
     </LinearGradient>

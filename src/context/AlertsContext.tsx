@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { cancelLocalAlert, scheduleLocalAlert } from '../services/alertScheduling';
+import { Location } from '../data/mockForecast';
+import { cancelLocalAlert, ensureNotificationPermission, parseWindowStartDate, scheduleLocalAlert } from '../services/alertScheduling';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'clearnight:alerts';
 
@@ -10,39 +12,73 @@ interface ScheduledFire {
 }
 
 export interface AlertPreference {
-  threshold: number; // 0-100, "only when night score is at least this"
+  threshold: number;
   nightsMode: 'any' | 'weekends' | 'pick';
-  pickedDays?: number[]; // day indices (0=tonight) when nightsMode === 'pick'
+  pickedDays?: number[];
   timing: 'evening' | 'dayBefore';
 }
 
-interface AlertRecord {
+export interface AlertRecord {
+  label: string;
+  alertType: 'location' | 'target';
+  enabled: boolean;
   preference: AlertPreference;
   fires: ScheduledFire[];
 }
 
 interface AlertsCtx {
   alerts: Record<string, AlertRecord>;
-  // Schedules one local notification per qualifying fire date, replacing
-  // any previously scheduled notifications for this key. Returns how many
-  // were actually scheduled (fire dates already in the past are skipped).
-  setMultiAlert: (
-    key: string,
-    preference: AlertPreference,
-    fires: { title: string; body: string; fireDate: Date; quietStart?: number; quietEnd?: number }[]
-  ) => Promise<number>;
+  saveAlertPreference: (key: string, label: string, alertType: 'location' | 'target', preference: AlertPreference) => void;
+  evaluateAndSchedule: (locations: Location[], quietStart: number, quietEnd: number) => Promise<void>;
   clearAlert: (key: string) => Promise<void>;
+  toggleAlert: (key: string) => void;
   hasAlert: (key: string) => boolean;
   getAlert: (key: string) => AlertRecord | undefined;
 }
 
 const AlertsContext = createContext<AlertsCtx>({
   alerts: {},
-  setMultiAlert: async () => 0,
+  saveAlertPreference: () => {},
+  evaluateAndSchedule: async () => {},
   clearAlert: async () => {},
+  toggleAlert: () => {},
   hasAlert: () => false,
   getAlert: () => undefined,
 });
+
+async function getUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
+
+async function syncAlertsToSupabase(alerts: Record<string, AlertRecord>) {
+  const userId = await getUserId();
+  if (!userId) return;
+  const rows = Object.entries(alerts).map(([key, data]) => ({
+    user_id: userId,
+    key,
+    data,
+  }));
+  if (rows.length === 0) return;
+  await supabase.from('alerts').upsert(rows, { onConflict: 'user_id,key' });
+}
+
+async function deleteAlertFromSupabase(key: string) {
+  const userId = await getUserId();
+  if (!userId) return;
+  await supabase.from('alerts').delete().eq('user_id', userId).eq('key', key);
+}
+
+async function loadAlertsFromSupabase(): Promise<Record<string, AlertRecord>> {
+  const userId = await getUserId();
+  if (!userId) return {};
+  const { data } = await supabase
+    .from('alerts')
+    .select('key, data')
+    .eq('user_id', userId);
+  if (!data) return {};
+  return Object.fromEntries(data.map(row => [row.key, row.data as AlertRecord]));
+}
 
 export function AlertsProvider({ children }: { children: React.ReactNode }) {
   const [alerts, setAlerts] = useState<Record<string, AlertRecord>>({});
@@ -52,20 +88,15 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const saved = await AsyncStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed: Record<string, AlertRecord> = JSON.parse(saved);
-          // Drop any individual fires whose time already passed; drop the
-          // whole record if nothing's left.
-          const now = Date.now();
-          const fresh: Record<string, AlertRecord> = {};
-          for (const [key, rec] of Object.entries(parsed)) {
-            const liveFires = rec.fires.filter((f) => f.fireDateMs > now);
-            if (liveFires.length > 0) fresh[key] = { ...rec, fires: liveFires };
-          }
-          setAlerts(fresh);
+        if (saved) setAlerts(JSON.parse(saved));
+
+        // Merge in any alerts from Supabase not in local cache
+        const remote = await loadAlertsFromSupabase();
+        if (Object.keys(remote).length > 0) {
+          setAlerts(prev => ({ ...remote, ...prev }));
         }
       } catch {
-        // Corrupt/unavailable storage — start fresh.
+        // Corrupt storage — start fresh.
       } finally {
         setHydrated(true);
       }
@@ -75,45 +106,145 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(alerts)).catch(() => {});
+    syncAlertsToSupabase(alerts).catch(() => {});
   }, [alerts, hydrated]);
 
-  const setMultiAlert = async (
+  const saveAlertPreference = (
     key: string,
+    label: string,
+    alertType: 'location' | 'target',
     preference: AlertPreference,
-    fires: { title: string; body: string; fireDate: Date; quietStart?: number; quietEnd?: number }[]
-  ): Promise<number> => {
-    // Replace any previously scheduled notifications for this key first.
-    const existing = alerts[key];
-    if (existing) {
-      await Promise.all(existing.fires.map((f) => cancelLocalAlert(f.notificationId)));
-    }
+  ) => {
+    setAlerts(prev => ({
+      ...prev,
+      [key]: {
+        label,
+        alertType,
+        enabled: true,
+        preference,
+        fires: prev[key]?.fires ?? [],
+      },
+    }));
+  };
 
-    const scheduled: ScheduledFire[] = [];
-    for (const f of fires) {
-      const notificationId = await scheduleLocalAlert(f);
-      if (notificationId) scheduled.push({ notificationId, fireDateMs: f.fireDate.getTime() });
-    }
+  const evaluateAndSchedule = async (locations: Location[], quietStart: number, quietEnd: number) => {
+    const granted = await ensureNotificationPermission();
+    if (!granted) return;
 
-    if (scheduled.length === 0) {
-      setAlerts((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      return 0;
-    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    setAlerts((prev) => ({ ...prev, [key]: { preference, fires: scheduled } }));
-    return scheduled.length;
+    setAlerts(prev => {
+      const next = { ...prev };
+
+      (async () => {
+        for (const [key, rec] of Object.entries(prev)) {
+          if (!rec.enabled) continue;
+
+          const locMatch = key.match(/^alert-loc-(\d+)$/);
+          const targetMatch = key.match(/^alert-(\d+)-(prime|object)-(.*)$/);
+          const locIndex = locMatch
+            ? parseInt(locMatch[1], 10)
+            : targetMatch
+            ? parseInt(targetMatch[1], 10)
+            : -1;
+
+          const loc = locations[locIndex];
+          if (!loc) continue;
+
+          const { threshold, nightsMode, pickedDays, timing } = rec.preference;
+
+          await Promise.all(rec.fires.map(f => cancelLocalAlert(f.notificationId)));
+
+          const qualifyingDays = loc.days
+            .map((d, i) => ({ d, i }))
+            .filter(({ d, i }) => {
+              if (d.score < threshold) return false;
+              if (nightsMode === 'pick') return pickedDays?.includes(i) ?? false;
+              if (nightsMode === 'weekends') {
+                const dow = new Date(today.getTime() + i * 86400000).getDay();
+                return dow === 0 || dow === 6;
+              }
+              return true;
+            });
+
+          const scheduled: ScheduledFire[] = [];
+
+          for (const { i } of qualifyingDays) {
+            const dayBase = new Date(today.getTime() + i * 86400000);
+            const nightLabel = i === 0 ? 'tonight' : loc.days[i].day;
+            let fireDate: Date;
+            let title: string;
+            let body: string;
+
+            if (locMatch) {
+              if (timing === 'dayBefore') {
+                fireDate = new Date(dayBase.getTime() - 86400000);
+                fireDate.setHours(18, 0, 0, 0);
+              } else {
+                const duskMs = loc.days[i].duskMs;
+                fireDate = duskMs ? new Date(duskMs) : new Date(dayBase.getTime());
+                if (!duskMs) fireDate.setHours(18, 0, 0, 0);
+              }
+              title = `Skies are clearing over ${loc.name}`;
+              body = timing === 'dayBefore'
+                ? `${loc.name} looks clear tomorrow night — score ${loc.days[i].score}.`
+                : `Tonight looks good at ${loc.name} — score ${loc.days[i].score}. Time to head out.`;
+            } else if (targetMatch) {
+              const type = targetMatch[2] as 'prime' | 'object';
+              const objIndex = targetMatch[3];
+              const obj = type === 'prime' ? loc.prime : loc.objects[parseInt(objIndex, 10)];
+              if (!obj) continue;
+              const windowLabel = type === 'prime'
+                ? (loc.prime as typeof loc.prime).visible
+                : (loc.objects[parseInt(objIndex, 10)] as typeof loc.objects[0]).window;
+              const windowStart = windowLabel ? parseWindowStartDate(windowLabel, dayBase) : null;
+              if (!windowStart) continue;
+
+              if (timing === 'dayBefore') {
+                fireDate = new Date(dayBase.getTime() - 86400000);
+                fireDate.setHours(18, 0, 0, 0);
+              } else {
+                fireDate = windowStart;
+              }
+              title = `${rec.label} is up ${nightLabel}`;
+              body = timing === 'dayBefore'
+                ? `${rec.label} should be visible tomorrow night — score ${loc.days[i].score}.`
+                : `${rec.label}'s window is starting — score ${loc.days[i].score}.`;
+            } else {
+              continue;
+            }
+
+            if (fireDate.getTime() <= Date.now()) continue;
+            const notificationId = await scheduleLocalAlert({ title, body, fireDate, quietStart, quietEnd });
+            if (notificationId) scheduled.push({ notificationId, fireDateMs: fireDate.getTime() });
+          }
+
+          next[key] = { ...rec, fires: scheduled };
+        }
+
+        setAlerts({ ...next });
+      })();
+
+      return next;
+    });
   };
 
   const clearAlert = async (key: string) => {
     const existing = alerts[key];
-    if (existing) await Promise.all(existing.fires.map((f) => cancelLocalAlert(f.notificationId)));
-    setAlerts((prev) => {
+    if (existing) await Promise.all(existing.fires.map(f => cancelLocalAlert(f.notificationId)));
+    deleteAlertFromSupabase(key).catch(() => {});
+    setAlerts(prev => {
       const next = { ...prev };
       delete next[key];
       return next;
+    });
+  };
+
+  const toggleAlert = (key: string) => {
+    setAlerts(prev => {
+      if (!prev[key]) return prev;
+      return { ...prev, [key]: { ...prev[key], enabled: !prev[key].enabled } };
     });
   };
 
@@ -121,7 +252,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   const getAlert = (key: string) => alerts[key];
 
   return (
-    <AlertsContext.Provider value={{ alerts, setMultiAlert, clearAlert, hasAlert, getAlert }}>
+    <AlertsContext.Provider value={{ alerts, saveAlertPreference, evaluateAndSchedule, clearAlert, toggleAlert, hasAlert, getAlert }}>
       {children}
     </AlertsContext.Provider>
   );

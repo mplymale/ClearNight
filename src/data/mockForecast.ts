@@ -11,6 +11,9 @@ export interface DayForecast {
   date: string;
   score: number;
   cloud: number;
+  humidity: number;
+  precipProb: number;
+  windKmh: number;
   moon: number;
   seeingN: number;
   bortle: number;
@@ -111,7 +114,7 @@ function mkLoc(
     days: rows.map((r, i) => {
       const [day, date, score, cloud, moon, seeingN, wlabel, sF, eF, clearBy, primeDark] = r;
       return {
-        day, date, score, cloud, moon, seeingN, bortle,
+        day, date, score, cloud, humidity: 65, precipProb: 0, windKmh: 16, moon, seeingN, bortle,
         verdict: verdictFromScore(score),
         seeingWord: SEEING_WORD[seeingN],
         moonPhase: MOON_PHASES[i] ?? 'Waxing gibbous',

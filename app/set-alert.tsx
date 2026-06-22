@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
 import { useLocations } from '../src/context/LocationsContext';
 import { useAlerts, AlertPreference } from '../src/context/AlertsContext';
-import { usePreferences } from '../src/context/PreferencesContext';
-import { ensureNotificationPermission, parseWindowStartDate } from '../src/services/alertScheduling';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 
 const NIGHTS_OPTIONS: { key: AlertPreference['nightsMode']; label: string }[] = [
@@ -24,12 +22,11 @@ export default function SetAlertScreen() {
   const insets = useSafeAreaInsets();
   const { locIndex, type, objIndex, objectName } = useLocalSearchParams<{
     locIndex: string;
-    type: 'prime' | 'object';
+    type: 'location' | 'prime' | 'object';
     objIndex?: string;
-    objectName: string;
+    objectName?: string;
   }>();
   const { locations } = useLocations();
-  const { quietStart, quietEnd } = usePreferences();
   const { nightVision } = useNightVision();
   const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
   const containerBg = nightVision ? '#150400' : '#080b12';
@@ -38,21 +35,24 @@ export default function SetAlertScreen() {
   const textPrimary = nightVision ? NV_TEXT : '#fff';
   const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.65)';
   const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
-  const { setMultiAlert, getAlert } = useAlerts();
+  const { saveAlertPreference, getAlert } = useAlerts();
 
   const loc = locations[Number(locIndex) ?? 0];
+  const isLocation = type === 'location';
   const isPrime = type === 'prime';
-  const obj = isPrime ? loc.prime : loc.objects[Number(objIndex)];
-  const windowLabel = isPrime ? loc.prime.visible : (obj as typeof loc.objects[0]).window;
+  const obj = isLocation ? null : isPrime ? loc.prime : loc.objects[Number(objIndex)];
+  const windowLabel = isLocation ? null : isPrime ? loc.prime.visible : (obj as typeof loc.objects[0]).window;
 
-  const alertKey = `alert-${locIndex}-${type}-${objIndex || 'prime'}`;
+  const alertKey = isLocation
+    ? `alert-loc-${locIndex}`
+    : `alert-${locIndex}-${type}-${objIndex || 'prime'}`;
+  const alertLabel = isLocation ? loc.name : (objectName ?? obj?.name ?? '');
   const existing = getAlert(alertKey)?.preference;
 
   const [threshold, setThreshold] = useState(existing?.threshold ?? 70);
   const [nightsMode, setNightsMode] = useState<AlertPreference['nightsMode']>(existing?.nightsMode ?? 'any');
   const [pickedDays, setPickedDays] = useState<Set<number>>(new Set(existing?.pickedDays ?? []));
   const [timing, setTiming] = useState<AlertPreference['timing']>(existing?.timing ?? 'evening');
-  const [saving, setSaving] = useState(false);
 
   function togglePickedDay(i: number) {
     setPickedDays((prev) => {
@@ -63,86 +63,16 @@ export default function SetAlertScreen() {
     });
   }
 
-  async function handleSetAlert() {
-    if (nightsMode === 'pick' && pickedDays.size === 0) {
-      Alert.alert('Pick at least one night', 'Choose which nights you want alerts for.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const granted = await ensureNotificationPermission();
-      if (!granted) {
-        Alert.alert('Notifications disabled', 'Enable notifications in Settings to get alerts.');
-        return;
-      }
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const qualifyingDays = loc.days
-        .map((d, i) => ({ d, i }))
-        .filter(({ d, i }) => {
-          if (d.score < threshold) return false;
-          if (nightsMode === 'pick') return pickedDays.has(i);
-          if (nightsMode === 'weekends') {
-            const dow = new Date(today.getTime() + i * 86400000).getDay(); // 0=Sun, 6=Sat
-            return dow === 0 || dow === 6;
-          }
-          return true; // 'any'
-        });
-
-      if (qualifyingDays.length === 0) {
-        Alert.alert(
-          'No matching nights',
-          `None of the next 6 nights meet that threshold yet. We'll keep this saved — try lowering the score or check back later.`
-        );
-      }
-
-      const fires = qualifyingDays
-        .map(({ i }) => {
-          const dayBase = new Date(today.getTime() + i * 86400000);
-          const windowStart = windowLabel ? parseWindowStartDate(windowLabel, dayBase) : null;
-          if (!windowStart) return null;
-
-          let fireDate: Date;
-          if (timing === 'dayBefore') {
-            fireDate = new Date(dayBase.getTime() - 86400000);
-            fireDate.setHours(18, 0, 0, 0); // a sensible evening heads-up, not literally "window time minus a day"
-          } else {
-            fireDate = windowStart;
-          }
-
-          const nightLabel = i === 0 ? 'tonight' : loc.days[i].day;
-          return {
-            title: `${objectName} is up ${nightLabel}`,
-            body:
-              timing === 'dayBefore'
-                ? `${objectName} should be visible tomorrow night — score ${loc.days[i].score}.`
-                : `${objectName}'s window is starting — score ${loc.days[i].score}.`,
-            fireDate,
-            quietStart,
-            quietEnd,
-          };
-        })
-        .filter((f): f is { title: string; body: string; fireDate: Date; quietStart: number; quietEnd: number } => f !== null && f.fireDate.getTime() > Date.now());
-
-      const preference: AlertPreference = {
-        threshold,
-        nightsMode,
-        pickedDays: nightsMode === 'pick' ? Array.from(pickedDays) : undefined,
-        timing,
-      };
-
-      const count = await setMultiAlert(alertKey, preference, fires);
-      if (count > 0) {
-        router.back();
-      } else if (qualifyingDays.length > 0) {
-        Alert.alert("Couldn't schedule", 'Those alert times have already passed.');
-      }
-    } finally {
-      setSaving(false);
-    }
+  function handleSetAlert() {
+    if (nightsMode === 'pick' && pickedDays.size === 0) return;
+    const preference: AlertPreference = {
+      threshold,
+      nightsMode,
+      pickedDays: nightsMode === 'pick' ? Array.from(pickedDays) : undefined,
+      timing,
+    };
+    saveAlertPreference(alertKey, alertLabel, isLocation ? 'location' : 'target', preference);
+    router.back();
   }
 
   return (
@@ -161,8 +91,15 @@ export default function SetAlertScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.eyebrow, { color: nvAccent }]}>NOTIFY ME ABOUT</Text>
-        <Text style={[styles.objectName, { color: textPrimary }]}>{objectName}</Text>
+        <Text style={[styles.eyebrow, { color: nvAccent }]}>
+          {isLocation ? 'LOCATION ALERT' : 'NOTIFY ME ABOUT'}
+        </Text>
+        <Text style={[styles.objectName, { color: textPrimary }, !isLocation && { marginBottom: 24 }]}>{alertLabel}</Text>
+        {isLocation && (
+          <Text style={[styles.locationSub, { color: textDim }]}>
+            Get notified when the skies are clear enough to observe here.
+          </Text>
+        )}
 
         {/* Threshold picker */}
         <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
@@ -229,10 +166,9 @@ export default function SetAlertScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.setBtn, { backgroundColor: nvAccent }, saving && { opacity: 0.6 }]}
+          style={[styles.setBtn, { backgroundColor: nvAccent }]}
           activeOpacity={0.85}
           onPress={handleSetAlert}
-          disabled={saving}
         >
           <Text style={styles.setBtnText}>Set alert</Text>
         </TouchableOpacity>
@@ -251,7 +187,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingBottom: 14,
   },
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 70 },
   backChev: { fontFamily: 'HankenGrotesk_400Regular', fontSize: 28, lineHeight: 32 },
@@ -285,7 +221,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     letterSpacing: -0.4,
     marginTop: 4,
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  locationSub: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    lineHeight: 20,
+    marginBottom: 22,
   },
 
   card: {

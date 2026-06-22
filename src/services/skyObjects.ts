@@ -285,3 +285,35 @@ export function computeTonightsSky(lat: number, lon: number, bortle: number, dus
   const remaining = allObjects.filter((_, i) => i !== bestIndex);
   return { prime, objects: remaining };
 }
+
+// Returns the peak altitude (degrees) of a meteor shower's radiant on its
+// peak night at the given observer location. Uses midnight of the peak date
+// as the reference time (the radiant RA/Dec is fixed, so midnight is fine).
+export function showerPeakAltitude(
+  raHours: number,
+  decDeg: number,
+  lat: number,
+  lon: number,
+  peakMonth: number,
+  peakDay: number,
+): number {
+  const observer = new Astronomy.Observer(lat, lon, 0);
+  const year = new Date().getFullYear();
+  // If the peak date has already passed this year, use next year.
+  const peakThisYear = new Date(year, peakMonth - 1, peakDay, 23, 59, 0);
+  const peakDate = peakThisYear < new Date() ? new Date(year + 1, peakMonth - 1, peakDay, 23, 59, 0) : peakThisYear;
+
+  // Sample every 30 min from 8pm to 6am around peak night.
+  const start = new Date(peakDate);
+  start.setHours(20, 0, 0, 0);
+  const end = new Date(peakDate);
+  end.setDate(end.getDate() + 1);
+  end.setHours(6, 0, 0, 0);
+
+  let best = -90;
+  for (let t = start.getTime(); t <= end.getTime(); t += 30 * 60 * 1000) {
+    const hor = Astronomy.Horizon(new Date(t), observer, raHours, decDeg, 'normal');
+    if (hor.altitude > best) best = hor.altitude;
+  }
+  return Math.round(best);
+}

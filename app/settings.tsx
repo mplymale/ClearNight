@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { usePreferences, formatQuietHours } from '../src/context/PreferencesContext';
+import { useAlerts } from '../src/context/AlertsContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
 
@@ -351,7 +352,8 @@ export default function SettingsScreen() {
   const [push, setPush] = useState(true);
   const [quietPickerVisible, setQuietPickerVisible] = useState(false);
   const { nightVision, setNightVision } = useNightVision();
-  const { use24h, setUse24h, useCelsius, setUseCelsius, quietStart, quietEnd, setQuietStart, setQuietEnd } = usePreferences();
+  const { use24h, setUse24h, useCelsius, setUseCelsius, useKnots, setUseKnots, quietStart, quietEnd, setQuietStart, setQuietEnd } = usePreferences();
+  const { alerts, toggleAlert, clearAlert } = useAlerts();
 
   const isPremium = tier === 'premium';
   const unlocked = tier !== 'free';
@@ -388,18 +390,20 @@ export default function SettingsScreen() {
         </View>
 
         {/* Dev tier toggle */}
-        <View style={styles.devRow}>
-          {(['free', 'trial', 'premium'] as Tier[]).map((t) => (
-            <TouchableOpacity
-              key={t}
-              style={[styles.devBtn, tier === t && { backgroundColor: 'rgba(126,240,210,0.2)', borderColor: ACCENT }]}
-              onPress={() => setTier(t)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.devBtnText, tier === t && { color: ACCENT }]}>{t}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {__DEV__ && (
+          <View style={styles.devRow}>
+            {(['free', 'trial', 'premium'] as Tier[]).map((t) => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.devBtn, tier === t && { backgroundColor: 'rgba(126,240,210,0.2)', borderColor: ACCENT }]}
+                onPress={() => setTier(t)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.devBtnText, tier === t && { color: ACCENT }]}>{t}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* ── MEMBERSHIP ── */}
         <View style={styles.group}>
@@ -438,13 +442,13 @@ export default function SettingsScreen() {
         {/* ── ALERTS ── */}
         <View style={styles.group}>
           <SectionLabel text="Alerts" color={textFaint} />
-          <Card border={cardBorder} bg={cardBg}>
-            {unlocked ? (
-              <>
-                <ThreshPresetRow value={thresh} onChange={setThresh} accent={ACCENT} divider={rowDivider} />
+          {unlocked ? (
+            <>
+              {/* Global controls */}
+              <Card border={cardBorder} bg={cardBg}>
                 <Row
                   name="Push notifications"
-                  sub="A nudge by 6pm on good nights"
+                  sub="Get nudged on nights that qualify"
                   right={<Toggle value={push} onToggle={() => setPush((p) => !p)} accent={ACCENT} />}
                   divider={rowDivider}
                   nameColor={textPrimary} subColor={textDim}
@@ -456,8 +460,52 @@ export default function SettingsScreen() {
                   nameColor={textPrimary}
                   borderless
                 />
-              </>
-            ) : (
+              </Card>
+
+              {/* Saved alerts list */}
+              {Object.keys(alerts).length > 0 && (
+                <View style={[styles.savedAlertsCard, { borderColor: cardBorder, backgroundColor: cardBg }]}>
+                  <Text style={[styles.savedAlertsHeader, { color: textFaint }]}>SAVED ALERTS</Text>
+                  {Object.entries(alerts).map(([key, rec], i, arr) => (
+                    <View
+                      key={key}
+                      style={[
+                        styles.savedAlertRow,
+                        i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: rowDivider },
+                      ]}
+                    >
+                      <View style={styles.savedAlertLeft}>
+                        <View style={[styles.savedAlertTypePill, rec.alertType === 'location' ? { backgroundColor: ACCENT + '22', borderColor: ACCENT } : { backgroundColor: 'rgba(143,208,255,0.12)', borderColor: '#8fd0ff' }]}>
+                          <Text style={[styles.savedAlertTypeText, { color: rec.alertType === 'location' ? ACCENT : '#8fd0ff' }]}>
+                            {rec.alertType === 'location' ? 'LOCATION' : 'TARGET'}
+                          </Text>
+                        </View>
+                        <Text style={[styles.savedAlertName, { color: textPrimary }]} numberOfLines={1}>{rec.label}</Text>
+                        <Text style={[styles.savedAlertMeta, { color: textDim }]}>
+                          {rec.fires.length} alert{rec.fires.length !== 1 ? 's' : ''} scheduled
+                        </Text>
+                      </View>
+                      <View style={styles.savedAlertRight}>
+                        <Toggle value={rec.enabled} onToggle={() => toggleAlert(key)} accent={ACCENT} />
+                        <TouchableOpacity onPress={() => clearAlert(key)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={[styles.savedAlertDelete, { color: textFaint }]}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {Object.keys(alerts).length === 0 && (
+                <View style={[styles.noAlertsCard, { borderColor: cardBorder, backgroundColor: cardBg }]}>
+                  <Text style={[styles.noAlertsText, { color: textDim }]}>
+                    No alerts saved yet. Tap the bell icon on a location or target to set one.
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <Card border={cardBorder} bg={cardBg}>
               <View style={styles.lockedRow}>
                 <View style={styles.lockedMain}>
                   <View style={styles.lockedNameRow}>
@@ -472,8 +520,8 @@ export default function SettingsScreen() {
                   <Text style={styles.lockedCtaText}>Unlock</Text>
                 </TouchableOpacity>
               </View>
-            )}
-          </Card>
+            </Card>
+          )}
         </View>
 
         {/* ── DISPLAY ── */}
@@ -496,6 +544,12 @@ export default function SettingsScreen() {
             <Row
               name="Time format"
               right={<SegControl options={['12h', '24h']} value={use24h ? '24h' : '12h'} onChange={(v) => setUse24h(v === '24h')} accent={ACCENT} />}
+              divider={rowDivider}
+              nameColor={textPrimary}
+            />
+            <Row
+              name="Wind speed"
+              right={<SegControl options={['mph', 'kts']} value={useKnots ? 'kts' : 'mph'} onChange={(v) => setUseKnots(v === 'kts')} accent={ACCENT} />}
               borderless
               nameColor={textPrimary}
             />
@@ -532,7 +586,7 @@ export default function SettingsScreen() {
               sub="Version 1.0"
               right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
               onPress={() => router.push('/about')}
-              borderless
+              divider={rowDivider}
               nameColor={textPrimary} subColor={textDim}
             />
           </Card>
@@ -787,6 +841,78 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '600',
     color: '#04130f',
+  },
+
+  // saved alerts card
+  savedAlertsCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginTop: 12,
+  },
+  savedAlertsHeader: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  savedAlertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    gap: 12,
+  },
+  savedAlertLeft: {
+    flex: 1,
+    gap: 3,
+  },
+  savedAlertTypePill: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginBottom: 2,
+  },
+  savedAlertTypeText: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  savedAlertName: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 14.5,
+    fontWeight: '500',
+  },
+  savedAlertMeta: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 11.5,
+  },
+  savedAlertRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flexShrink: 0,
+  },
+  savedAlertDelete: {
+    fontSize: 15,
+  },
+  noAlertsCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    marginTop: 12,
+  },
+  noAlertsText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 13.5,
+    lineHeight: 20,
+    textAlign: 'center',
   },
 
   // locked alerts row (free tier)

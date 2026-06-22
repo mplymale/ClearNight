@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,8 +52,26 @@ export default function AboutScreen() {
         <View style={styles.metaList}>
           <View style={styles.metaRow}>
             <Text style={styles.metaLabel}>Developer</Text>
-            <Text style={styles.metaValue}>ClearNight LLC</Text>
+            <Text style={styles.metaValue}>Strange Glyph</Text>
           </View>
+          <View style={styles.metaDivider} />
+          <TouchableOpacity
+            style={styles.metaRow}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('mailto:info@strangeglyph.com')}
+          >
+            <Text style={styles.metaLabel}>Contact</Text>
+            <Text style={[styles.metaValue, { color: ACCENT }]}>info@strangeglyph.com</Text>
+          </TouchableOpacity>
+          <View style={styles.metaDivider} />
+          <TouchableOpacity
+            style={styles.metaRow}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL('https://www.clearnightapp.com')}
+          >
+            <Text style={styles.metaLabel}>Website</Text>
+            <Text style={[styles.metaValue, { color: ACCENT }]}>clearnightapp.com</Text>
+          </TouchableOpacity>
           <View style={styles.metaDivider} />
           <View style={styles.metaRow}>
             <Text style={styles.metaLabel}>Version</Text>

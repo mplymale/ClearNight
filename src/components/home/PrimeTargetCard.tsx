@@ -9,6 +9,70 @@ import { useFavorites, favoritedObjectIndices } from '../../context/FavoritesCon
 import { useInterests } from '../../context/InterestsContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
 
+// Parse a time string like "9:10p", "4:39a", "10:10pm" into a Date today,
+// pushing AM times (dawn/window-ends) to tomorrow if they fall before a PM anchor.
+function parseTimeToday(t: string, pushPastMidnight = false): Date | null {
+  const m = t.trim().match(/^(\d+):(\d+)\s*(am?|pm?)$/i);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2]);
+  const isPm = /^p/i.test(m[3]);
+  if (isPm && h !== 12) h += 12;
+  if (!isPm && h === 12) h = 0;
+  const d = new Date();
+  d.setSeconds(0, 0);
+  d.setHours(h, min);
+  if (pushPastMidnight) d.setTime(d.getTime() + 86400000);
+  return d;
+}
+
+// Returns a short uppercase eyebrow label describing current visibility status.
+function visibilityLabel(window: string, dusk: string, dawn: string): string {
+  const parts = window.split('–').map((s) => s.trim());
+  if (parts.length < 2) return 'TONIGHT';
+
+  const startRaw = parseTimeToday(parts[0]);
+  const endRaw = parseTimeToday(parts[1]);
+  if (!startRaw || !endRaw) return 'TONIGHT';
+
+  const start = startRaw;
+  // End times in the AM are the next calendar day (window spans midnight).
+  const end = endRaw.getTime() <= startRaw.getTime()
+    ? new Date(endRaw.getTime() + 86400000)
+    : endRaw;
+
+  // Dawn is always an AM time the next calendar day relative to dusk.
+  const dawnDate = parseTimeToday(dawn, true);
+  // Dusk is tonight (PM).
+  const duskDate = parseTimeToday(dusk);
+
+  const now = Date.now();
+  const startMs = start.getTime();
+  const endMs = end.getTime();
+  const ONE_HOUR = 3600000;
+
+  // Between dawn and dusk = daytime; window data refers to tonight's upcoming session.
+  const isDaytime = dawnDate && duskDate
+    ? now >= dawnDate.getTime() && now < duskDate.getTime()
+    : false;
+
+  if (now >= startMs && now <= endMs) {
+    if (endMs - now < ONE_HOUR) {
+      const minLeft = Math.round((endMs - now) / 60000);
+      return `CLOSES IN ${minLeft}m`;
+    }
+    return 'VISIBLE NOW';
+  }
+  if (now < startMs || isDaytime) {
+    if (!isDaytime && startMs - now < ONE_HOUR) {
+      const minUntil = Math.round((startMs - now) / 60000);
+      return `RISES IN ${minUntil}m`;
+    }
+    return `RISES ${parts[0].toUpperCase()}`;
+  }
+  return 'PAST WINDOW';
+}
+
 function Compass({ deg, accent }: { deg: number; accent: string }) {
   return (
     <Svg viewBox="0 0 64 64" width={60} height={60} fill="none">
@@ -78,11 +142,10 @@ function TargetCard({ eyebrow, display, accent, cardBorder, cardBg, clouded, clo
       {clouded ? (
         <View style={styles.main}>
           <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
-          <Text style={[styles.name, { color: nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.55)' }]}>
-            Clouded out
-          </Text>
-          <Text style={[styles.sub, { color: textDim }]}>
-            {display.name} hidden behind {cloudPct}% cloud
+          <Text style={[styles.name, { color: textPrimary }]}>{display.name}</Text>
+          <Text style={[styles.sub, { color: textDim }]}>{display.sub}</Text>
+          <Text style={[styles.meta, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)' }]}>
+            ☁ Clouded out · {cloudPct}% cloud
           </Text>
         </View>
       ) : (
@@ -152,7 +215,7 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
     return (
       <View style={styles.list}>
         <TargetCard
-          eyebrow="PRIME TARGET"
+          eyebrow={visibilityLabel(display.visible, loc.dusk, loc.dawn)}
           display={display}
           accent={accent}
           cardBorder={cardBorder}
@@ -168,9 +231,6 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
   const favIndices = favoritedObjectIndices(favorites, locIndex);
   const primeFavorited = favorites.has(`${locIndex}-prime-prime`);
 
-  // The galactic core has a fixed, recognizable `sub` — if `loc.prime` shows
-  // something else, the core wasn't well-placed tonight and a different
-  // object got promoted to prime instead.
   const coreIsUp = loc.prime.sub === 'Sagittarius · Galactic center';
   const hasCategory = (cat: string) => loc.objects.some((o) => o.category === cat);
 
@@ -189,20 +249,19 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
     </View>
   ) : null;
 
-  // Nothing starred at all yet — fall back to the single default pick.
+  // Nothing starred yet — show prime as the default pick.
   if (favIndices.length === 0 && !primeFavorited) {
-    const display = {
-      name: loc.prime.name,
-      sub: loc.prime.sub,
-      visible: loc.prime.visible,
-      dir: loc.prime.dir,
-      dirDeg: loc.prime.dirDeg,
-    };
     return (
       <View style={styles.list}>
         <TargetCard
-          eyebrow="PRIME TARGET"
-          display={display}
+          eyebrow={visibilityLabel(loc.prime.visible, loc.dusk, loc.dawn)}
+          display={{
+            name: loc.prime.name,
+            sub: loc.prime.sub,
+            visible: loc.prime.visible,
+            dir: loc.prime.dir,
+            dirDeg: loc.prime.dirDeg,
+          }}
           accent={accent}
           cardBorder={cardBorder}
           cardBg={cardBg}
@@ -220,7 +279,7 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
     <View style={styles.list}>
       {primeFavorited && (
         <TargetCard
-          eyebrow="YOUR PICK"
+          eyebrow={visibilityLabel(loc.prime.visible, loc.dusk, loc.dawn)}
           display={{
             name: loc.prime.name,
             sub: loc.prime.sub,
@@ -248,7 +307,7 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
         return (
           <TargetCard
             key={objIndex}
-            eyebrow="YOUR PICK"
+            eyebrow={visibilityLabel(display.visible, loc.dusk, loc.dawn)}
             display={display}
             accent={accent}
             cardBorder={cardBorder}

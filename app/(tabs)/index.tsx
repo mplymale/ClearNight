@@ -12,7 +12,7 @@ import {
 
 const SCREEN_W = Dimensions.get('window').width;
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path } from 'react-native-svg';
 import { router } from 'expo-router';
 
 import { VERDICTS } from '../../src/constants/verdicts';
@@ -25,9 +25,12 @@ import { FactorChips } from '../../src/components/home/FactorChips';
 import { LockedCards } from '../../src/components/home/LockedCards';
 import { NightArc } from '../../src/components/home/NightArc';
 import { FeaturedTargets } from '../../src/components/home/PrimeTargetCard';
+import { MoonHumidityRow } from '../../src/components/home/MoonHumidityRow';
 import { SkyBackground } from '../../src/components/home/SkyBackground';
 import { StarField } from '../../src/components/home/StarField';
 import { useSubscription, SubscriptionStatus } from '../../src/context/SubscriptionContext';
+import { useAlerts } from '../../src/context/AlertsContext';
+import { usePreferences } from '../../src/context/PreferencesContext';
 
 // ── Shared icons ─────────────────────────────────────────────────────────────
 
@@ -86,13 +89,22 @@ function ListIcon() {
   );
 }
 
+function BellIcon({ active, color }: { active: boolean; color: string }) {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+      <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill={active ? color : 'none'} fillOpacity={active ? 0.25 : 0} />
+      <Path d="M13.73 21a2 2 0 0 1-3.46 0" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 function LockIcon({ color }: { color: string }) {
   return (
     <Svg width={12} height={14} viewBox="0 0 12 14" fill="none">
       <Path d="M2 6V4a4 4 0 0 1 8 0v2" stroke={color} strokeWidth={1.5} strokeLinecap="round" />
-      <Svg x={0} y={5} width={12} height={9}>
+      <G transform="translate(0, 5)">
         <Path d="M1 0h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V1a1 1 0 0 1 1-1Z" fill={color} opacity={0.55} />
-      </Svg>
+      </G>
     </Svg>
   );
 }
@@ -102,7 +114,6 @@ function LockIcon({ color }: { color: string }) {
 interface TopSectionProps {
   onList: () => void;
   onSettings: () => void;
-  // premium location props
   isPremium: boolean;
   locName: string;
   locRegion: string;
@@ -110,12 +121,12 @@ interface TopSectionProps {
   locCount: number;
   onPrevLoc: () => void;
   onNextLoc: () => void;
-  // free location props
   isFree: boolean;
   accentColor: string;
   onAddSpot: () => void;
   onManage: () => void;
   planCount: number;
+  refreshing: boolean;
 }
 
 function TopSection(p: TopSectionProps) {
@@ -161,7 +172,10 @@ function TopSection(p: TopSectionProps) {
               <Text style={[styles.locName, { color: textPrimary }]} numberOfLines={1}>{p.locName}</Text>
             </TouchableOpacity>
           )}
-          <Text style={[styles.locRegion, { color: textDim }]}>{p.locRegion}</Text>
+          <View style={styles.locRegionRow}>
+            <Text style={[styles.locRegion, { color: textDim }]}>{p.locRegion}</Text>
+            {p.refreshing && <View style={[styles.refreshDot, { backgroundColor: nightVision ? NV_ACCENT : '#7ef0d2' }]} />}
+          </View>
         </View>
 
         {/* Right chevron */}
@@ -175,7 +189,6 @@ function TopSection(p: TopSectionProps) {
             <Text style={[styles.locChevron, p.locIndex === p.locCount - 1 && styles.locChevronFaded]}>›</Text>
           </TouchableOpacity>
         )}
-
         <TouchableOpacity style={[styles.iconBtn, { borderColor: btnBorder, backgroundColor: btnBg }]} onPress={p.onSettings} activeOpacity={0.7}>
           <GearIcon />
         </TouchableOpacity>
@@ -211,28 +224,14 @@ function TopSection(p: TopSectionProps) {
   );
 }
 
-// ── Dev tier toggle (remove before shipping) ─────────────────────────────────
-// Cycles the *real* persisted subscription status (not a fake local-only
-// value) so testing free/trial/subscribed states actually matches what
-// the rest of the app (trial banner, paywall) will see.
-
-function TierToggle({ status, onCycle }: { status: SubscriptionStatus; onCycle: () => void }) {
-  const label = status === 'subscribed' ? '★' : status === 'trial' ? '◐' : '○';
-  return (
-    <TouchableOpacity style={styles.devToggle} onPress={onCycle} activeOpacity={0.7}>
-      <Text style={styles.devToggleText}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { nightVision } = useNightVision();
-  const { status, setStatus } = useSubscription();
+  const { status } = useSubscription();
   const { plan } = usePlan();
-  const { locations, activeLocIndex } = useLocations();
+  const { locations, activeLocIndex, hydrated, refreshingNames, fetchErrorNames, clearFetchError } = useLocations();
   const [locIndex, setLocIndex] = useState(0);
   const [dayIndex, setDayIndex] = useState(0);
   // Sync when user picks a location from manage-locations
@@ -241,7 +240,16 @@ export default function HomeScreen() {
     setDayIndex(0);
   }, [activeLocIndex]);
 
+  const { hasAlert, evaluateAndSchedule } = useAlerts();
+  const { quietStart, quietEnd } = usePreferences();
   const isFree = status === 'free';
+
+  // Re-evaluate alert schedules whenever forecast data refreshes
+  useEffect(() => {
+    if (locations.length > 0) {
+      evaluateAndSchedule(locations, quietStart, quietEnd);
+    }
+  }, [locations]);
   const nvTextPrimary = nightVision ? NV_TEXT : '#fff';
   const nvTextDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.72)';
 
@@ -307,6 +315,15 @@ export default function HomeScreen() {
 
   // No spots saved (e.g. the user removed their last one) — prompt to add
   // one rather than crashing on undefined location/day data below.
+  if (!hydrated) {
+    return (
+      <View style={[styles.container, styles.emptyState, { paddingTop: insets.top, backgroundColor: nightVision ? '#100200' : '#080b12' }]}>
+        <ForecastMark size={48} accent={nightVision ? NV_ACCENT : '#7ef0d2'} />
+        <Text style={[styles.emptyStateBody, { color: nvTextDim, marginTop: 20 }]}>Loading your spots…</Text>
+      </View>
+    );
+  }
+
   if (!loc || !day) {
     return (
       <View style={[styles.container, styles.emptyState, { paddingTop: insets.top }]}>
@@ -352,21 +369,44 @@ export default function HomeScreen() {
           onNextLoc={() => goLoc(1)}
           accentColor={verdict.accent}
           onAddSpot={() => router.push('/add-location')}
+          refreshing={refreshingNames.has(loc.name)}
         />
 
-        {/* Dev tier toggle — tiny absolute badge, remove before shipping */}
-        <View style={styles.devToggleWrap}>
-          <TierToggle
-            status={status}
-            onCycle={() => setStatus(status === 'free' ? 'trial' : status === 'trial' ? 'subscribed' : 'free')}
-          />
-        </View>
-
+        {fetchErrorNames.has(loc.name) && (
+          <TouchableOpacity
+            style={styles.fetchErrorBanner}
+            activeOpacity={0.8}
+            onPress={() => clearFetchError(loc.name)}
+          >
+            <Text style={styles.fetchErrorText}>⚠ Couldn't update forecast — showing last known data. Tap to dismiss.</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Day strip (premium only) */}
         {!isFree && (
           <View style={styles.stripWrap}>
-            <DayStrip days={loc.days} selectedIndex={dayIndex} onSelect={(i) => setDayIndex(i)} />
+            <DayStrip
+              days={loc.days}
+              selectedIndex={dayIndex}
+              onSelect={(i) => setDayIndex(i)}
+            />
+            {/* Location alert bell — sits below the forecast strip */}
+            {(() => {
+              const locAlert = hasAlert(`alert-loc-${safeLocIndex}`);
+              const nvAccent = nightVision ? NV_ACCENT : verdict.accent;
+              return (
+                <TouchableOpacity
+                  style={styles.locationBellRow}
+                  onPress={() => router.push({ pathname: '/set-alert', params: { locIndex: String(safeLocIndex), type: 'location' } })}
+                  activeOpacity={0.7}
+                >
+                  <BellIcon active={locAlert} color={locAlert ? nvAccent : 'rgba(255,255,255,0.4)'} />
+                  <Text style={[styles.locationBellText, { color: locAlert ? nvAccent : 'rgba(255,255,255,0.4)' }]}>
+                    {locAlert ? 'Alert set for this location' : 'Set an alert for this location'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
           </View>
         )}
 
@@ -393,7 +433,10 @@ export default function HomeScreen() {
 
             {/* Factor chips — premium only (day-by-day breakdown) */}
           {!isFree && (
-            <FactorChips day={day} locIndex={locIndex} dayIndex={dayIndex} />
+            <>
+              <FactorChips day={day} locIndex={locIndex} dayIndex={dayIndex} />
+              <MoonHumidityRow day={day} locIndex={locIndex} dayIndex={dayIndex} />
+            </>
           )}
 
           {/* Prime target card — always visible, even on free */}
@@ -459,6 +502,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#04130f',
   },
+  fetchErrorBanner: {
+    marginHorizontal: 16,
+    marginTop: 6,
+    marginBottom: 2,
+    borderRadius: 12,
+    backgroundColor: 'rgba(224,100,60,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(224,100,60,0.35)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  fetchErrorText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: '#e87050',
+  },
   scroll: {
     flex: 1,
   },
@@ -497,6 +557,11 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingHorizontal: 16,
     gap: 2,
+  },
+  locRowSide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   iconBtn: {
     width: 42,
@@ -561,6 +626,17 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.55)',
     letterSpacing: 0.2,
   },
+  locRegionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  refreshDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.8,
+  },
 
   // dots
   locDots: {
@@ -597,32 +673,22 @@ const styles = StyleSheet.create({
   },
 
 
-  // dev toggle — floating badge, doesn't affect layout
-  devToggleWrap: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    zIndex: 99,
-  },
-  devToggle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  devToggleText: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.6)',
-  },
 
   // day strip
   stripWrap: {
     paddingHorizontal: 16,
+  },
+  locationBellRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingTop: 10,
+    paddingHorizontal: 4,
+  },
+  locationBellText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 12,
   },
 
   trialBanner: {

@@ -8,11 +8,35 @@ import { useFavorites } from '../src/context/FavoritesContext';
 import { usePreferences, applyTimeFormat } from '../src/context/PreferencesContext';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { SkyObject } from '../src/data/mockForecast';
+import { METEOR_SHOWERS } from '../src/data/skyCatalog';
+import { showerPeakAltitude } from '../src/services/skyObjects';
+
+function nextMeteorShower(): { name: string; peakMonth: number; peakDay: number } | null {
+  const now = new Date();
+  const curOrd = now.getMonth() * 100 + now.getDate();
+  const toOrd = (month: number, day: number) => month * 100 + day;
+  const toDiff = (month: number, day: number) => {
+    const ord = toOrd(month, day);
+    return ord >= curOrd ? ord - curOrd : ord + 1200 - curOrd;
+  };
+  const next = [...METEOR_SHOWERS].sort((a, b) => toDiff(a.peak.month, a.peak.day) - toDiff(b.peak.month, b.peak.day))[0];
+  return next ? { name: next.name, peakMonth: next.peak.month, peakDay: next.peak.day } : null;
+}
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const QUALITY_COLOR: Record<string, string> = {
-  Excellent: '#7ef0d2',
-  Good: '#8fd0ff',
-  Mediocre: 'rgba(255,255,255,0.45)',
+  Excellent: '#8fd0ff',
+  Good: '#7ef0d2',
+  Mediocre: '#e8c55a',
+  Poor: '#e07060',
+};
+
+const QUALITY_COLOR_NV: Record<string, string> = {
+  Excellent: '#e07830',
+  Good: '#c86428',
+  Mediocre: '#a04820',
+  Poor: '#7a2c14',
 };
 
 export default function TonightsSkyScreen() {
@@ -54,12 +78,16 @@ export default function TonightsSkyScreen() {
   }
 
   const CATEGORY_LABELS: Record<string, string> = {
+    milkyway: 'Milky Way',
     deep: 'Deep Sky',
     planets: 'Planets',
     meteors: 'Meteor Showers',
   };
 
-  const categoryOrder = ['deep', 'planets', 'meteors'];
+  const categoryOrder = ['milkyway', 'deep', 'planets', 'meteors'];
+
+  const primeKey = `${idx}-prime-prime`;
+  const primeStarred = favorites.has(primeKey);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: containerBg }]}>
@@ -78,19 +106,87 @@ export default function TonightsSkyScreen() {
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.subtitle, { color: textFaint }]}>{loc.name} · {loc.objects.length} objects visible</Text>
+        <Text style={[styles.subtitle, { color: textFaint }]}>{loc.name} · {loc.objects.length + 1} objects visible</Text>
 
-        {categoryOrder.map((cat) => {
+        {/* Milky Way / prime target — always its own section at the top */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionHeader, { color: textFaint }]}>{CATEGORY_LABELS.milkyway}</Text>
+          <TouchableOpacity
+            style={[styles.row, { backgroundColor: cardBg, borderColor: cardBorder }]}
+            activeOpacity={0.8}
+            onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(idx), type: 'prime' } })}
+          >
+            <View style={styles.rowMain}>
+              <View style={styles.rowTop}>
+                <Text style={[styles.rowName, { color: textPrimary }]}>{loc.prime.name}</Text>
+                <Text style={[styles.rowQuality, { color: (nightVision ? QUALITY_COLOR_NV : QUALITY_COLOR)['Excellent'] }]}>Prime</Text>
+              </View>
+              <Text style={[styles.rowSub, { color: textDim }]}>{loc.prime.sub}</Text>
+              <Text style={[styles.rowMeta, { color: textDim }]}>
+                Visible <Text style={[styles.rowMetaBold, { color: textPrimary }]}>{loc.prime.visible}</Text>
+                {'  '}Peak <Text style={[styles.rowMetaBold, { color: textPrimary }]}>{loc.prime.peakAlt}°</Text>
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.starBtn}
+              onPress={() => toggleFavorite(primeKey)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={[styles.starIcon, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.3)' }, primeStarred && { color: accent }]}>
+                {primeStarred ? '★' : '☆'}
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
+
+        {categoryOrder.slice(1).map((cat) => {
           const items = grouped[cat];
-          if (!items?.length) return null;
+          const isMeteors = cat === 'meteors';
+
+          if (!items?.length && !isMeteors && cat !== 'deep' && cat !== 'planets') return null;
+
+          const ZERO_STATE_COPY: Record<string, string> = {
+            deep: 'No deep-sky objects clear of the horizon tonight.',
+            planets: 'No planets well-placed tonight.',
+          };
+
           return (
             <View key={cat} style={styles.section}>
               <Text style={[styles.sectionHeader, { color: textFaint }]}>{CATEGORY_LABELS[cat] ?? cat}</Text>
-              {items.map((obj, i) => {
+
+              {(!items?.length && (isMeteors || cat === 'deep' || cat === 'planets')) ? (() => {
+                const next = nextMeteorShower();
+                let nextLabel = 'Check back during peak seasons.';
+                if (next) {
+                  const peakAlt = showerPeakAltitude(
+                    METEOR_SHOWERS.find(s => s.name === next.name)!.radiantRaHours,
+                    METEOR_SHOWERS.find(s => s.name === next.name)!.radiantDecDeg,
+                    loc.latitude, loc.longitude,
+                    next.peakMonth, next.peakDay,
+                  );
+                  const visLabel = peakAlt < 0
+                    ? 'below the horizon from here'
+                    : peakAlt < 20
+                    ? `low on the horizon (${peakAlt}°) from here`
+                    : `${peakAlt}° altitude from ${loc.name}`;
+                  nextLabel = `Next up: ${next.name} — peaks ${MONTH_NAMES[next.peakMonth - 1]} ${next.peakDay} · ${visLabel}`;
+                }
+                const title = isMeteors ? 'No active meteor showers tonight' : ZERO_STATE_COPY[cat];
+                const sub = isMeteors ? nextLabel : undefined;
+                return (
+                  <View style={[styles.zeroStateCard, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+                    <Text style={[styles.zeroStateTitle, { color: textDim }]}>{title}</Text>
+                    {sub && <Text style={[styles.zeroStateSub, { color: textFaint }]}>{sub}</Text>}
+                  </View>
+                );
+              })() : items?.map((obj, i) => {
                 const objIndex = loc.objects.indexOf(obj);
                 const favKey = `${idx}-object-${objIndex}`;
                 const starred = favorites.has(favKey);
-                const qColor = QUALITY_COLOR[obj.quality] ?? '#fff';
+                const qColors = nightVision ? QUALITY_COLOR_NV : QUALITY_COLOR;
+                const qColor = qColors[obj.quality] ?? textDim;
+                const subLine = [obj.type, obj.con].filter(Boolean).join(' · ');
 
                 return (
                   <TouchableOpacity
@@ -104,7 +200,7 @@ export default function TonightsSkyScreen() {
                         <Text style={[styles.rowName, { color: textPrimary }]}>{obj.name}</Text>
                         <Text style={[styles.rowQuality, { color: qColor }]}>{obj.quality}</Text>
                       </View>
-                      <Text style={[styles.rowSub, { color: textDim }]}>{obj.type} · {obj.con}</Text>
+                      <Text style={[styles.rowSub, { color: textDim }]}>{subLine}</Text>
                       <Text style={[styles.rowMeta, { color: textDim }]}>
                         Visible <Text style={[styles.rowMetaBold, { color: textPrimary }]}>{fmt(obj.window)}</Text>
                         {'  '}Peak <Text style={[styles.rowMetaBold, { color: textPrimary }]}>{obj.peakAlt}°</Text>
@@ -262,5 +358,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginTop: 40,
+  },
+  zeroStateCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 4,
+  },
+  zeroStateTitle: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 14,
+  },
+  zeroStateSub: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 12,
   },
 });
