@@ -416,7 +416,7 @@ export default function HomeScreen() {
             <View style={[styles.trialDot, { backgroundColor: verdict.accent }]} />
             <Text style={[styles.trialText, { color: nvTextDim }]}>
               <Text style={[styles.trialBold, { color: nvTextPrimary }]}>Premium trial</Text>
-              {' · 5 days left — full forecast & GO alerts'}
+              {' · 5 days left — full forecast, alerts & more'}
             </Text>
             <TouchableOpacity style={[styles.trialBtn, { backgroundColor: verdict.accent }]} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
               <Text style={[styles.trialBtnText, { color: '#04130f' }]}>Upgrade</Text>

@@ -249,24 +249,64 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
     </View>
   ) : null;
 
-  // Nothing starred yet — show prime as the default pick.
+  // Nothing starred yet — show objects matching interests, or prime as fallback.
   if (favIndices.length === 0 && !primeFavorited) {
+    const objectsLoaded = loc.objects.length > 0 && loc.objects.some(o => o.category !== undefined);
+    const interestObjects = objectsLoaded ? loc.objects.filter((o) => {
+      if (interests.deep && o.category === 'deep') return true;
+      if (interests.planets && o.category === 'planets') return true;
+      if (interests.meteors && o.category === 'meteors') return true;
+      return false;
+    }).slice(0, 3) : [];
+
+    const showMilky = interests.milky && coreIsUp;
+    const hasInterests = interests.milky || interests.deep || interests.planets || interests.meteors;
+
+    // Objects loaded but nothing matches interests — show empty notes only
+    if (hasInterests && objectsLoaded && !showMilky && interestObjects.length === 0) {
+      return (
+        <View style={styles.list}>
+          {EmptyNotes}
+          <BrowseLink accent={accent} locIndex={locIndex} />
+        </View>
+      );
+    }
+
+    if (hasInterests && (showMilky || interestObjects.length > 0)) {
+      return (
+        <View style={styles.list}>
+          {showMilky && (
+            <TargetCard
+              eyebrow={visibilityLabel(loc.prime.visible, loc.dusk, loc.dawn)}
+              display={{ name: loc.prime.name, sub: loc.prime.sub, visible: loc.prime.visible, dir: loc.prime.dir, dirDeg: loc.prime.dirDeg }}
+              accent={accent} cardBorder={cardBorder} cardBg={cardBg} clouded={clouded} cloudPct={day.cloud}
+              onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
+            />
+          )}
+          {interestObjects.map((obj, i) => {
+            const objIndex = loc.objects.indexOf(obj);
+            return (
+              <TargetCard
+                key={i}
+                eyebrow={visibilityLabel(obj.window, loc.dusk, loc.dawn)}
+                display={{ name: obj.name, sub: obj.cat ?? '', visible: obj.window, dir: obj.dirLabel, dirDeg: obj.dirDeg }}
+                accent={accent} cardBorder={cardBorder} cardBg={cardBg} clouded={clouded} cloudPct={day.cloud}
+                onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'object', objIndex: String(objIndex) } })}
+              />
+            );
+          })}
+          {EmptyNotes}
+          <BrowseLink accent={accent} locIndex={locIndex} />
+        </View>
+      );
+    }
+
     return (
       <View style={styles.list}>
         <TargetCard
           eyebrow={visibilityLabel(loc.prime.visible, loc.dusk, loc.dawn)}
-          display={{
-            name: loc.prime.name,
-            sub: loc.prime.sub,
-            visible: loc.prime.visible,
-            dir: loc.prime.dir,
-            dirDeg: loc.prime.dirDeg,
-          }}
-          accent={accent}
-          cardBorder={cardBorder}
-          cardBg={cardBg}
-          clouded={clouded}
-          cloudPct={day.cloud}
+          display={{ name: loc.prime.name, sub: loc.prime.sub, visible: loc.prime.visible, dir: loc.prime.dir, dirDeg: loc.prime.dirDeg }}
+          accent={accent} cardBorder={cardBorder} cardBg={cardBg} clouded={clouded} cloudPct={day.cloud}
           onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
         />
         {EmptyNotes}

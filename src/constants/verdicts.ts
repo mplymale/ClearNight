@@ -13,7 +13,7 @@ export interface Verdict {
 
 export const VERDICTS: Record<VerdictKey, Verdict> = {
   excellent: {
-    label: 'GO',
+    label: 'Excellent',
     word: 'Pristine',
     accent: '#8fd0ff',
     accentSoft: 'rgba(143,208,255,0.16)',
@@ -23,7 +23,7 @@ export const VERDICTS: Record<VerdictKey, Verdict> = {
     chip: '#8fd0ff',
   },
   good: {
-    label: 'GO',
+    label: 'Good',
     word: 'Great',
     accent: '#7ef0d2',
     accentSoft: 'rgba(126,240,210,0.16)',
@@ -33,7 +33,7 @@ export const VERDICTS: Record<VerdictKey, Verdict> = {
     chip: '#7ef0d2',
   },
   fair: {
-    label: 'COND',
+    label: 'Fair',
     word: 'Workable',
     accent: '#ffce8f',
     accentSoft: 'rgba(255,206,143,0.15)',
@@ -43,7 +43,7 @@ export const VERDICTS: Record<VerdictKey, Verdict> = {
     chip: '#ffc27a',
   },
   poor: {
-    label: 'NO-GO',
+    label: 'Poor',
     word: 'Washed out',
     accent: '#c4ccd6',
     accentSoft: 'rgba(196,204,214,0.14)',

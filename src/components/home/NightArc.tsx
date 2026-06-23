@@ -6,8 +6,8 @@ import { DayForecast, Location } from '../../data/mockForecast';
 import { useNightVision, NV_ACCENT, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../../context/NightVisionContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
 
-// Arc geometry — matches prototype exactly
-const ARC = { cx: 160, cy: 120, r: 108 };
+const ARC = { cx: 160, cy: 190, r: 133 };
+const SVG_H = 199;
 
 function polar(frac: number): [number, number] {
   const a = Math.PI * (1 - frac);
@@ -17,10 +17,6 @@ function polar(frac: number): [number, number] {
 function arcPath(f0: number, f1: number): string {
   const [x0, y0] = polar(f0);
   const [x1, y1] = polar(f1);
-  // The whole arc only ever spans 180° (f: 0→1), so any sub-window's sweep
-  // is always ≤180° — always take the minor arc. Using the major arc for
-  // windows spanning more than half the span loops the path through the
-  // invisible lower half of the circle, producing a stray diagonal line.
   return `M${x0.toFixed(1)} ${y0.toFixed(1)} A ${ARC.r} ${ARC.r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
 }
 
@@ -45,17 +41,9 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
     ? [day.window.s, day.window.e].map((f) => polar(f))
     : [];
 
-  const [leftX, leftY] = polar(0);
-  const [rightX, rightY] = polar(1);
-
   return (
     <View style={styles.hero}>
-      <Svg
-        width="100%"
-        height={168}
-        viewBox="0 0 320 168"
-        style={styles.arc}
-      >
+      <Svg width="100%" height={SVG_H} viewBox={`0 0 320 199`} style={styles.arc}>
         <Defs>
           <LinearGradient id="winGrad" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0%" stopColor={accent} stopOpacity={0} />
@@ -63,8 +51,6 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
             <Stop offset="100%" stopColor={accent} stopOpacity={0} />
           </LinearGradient>
         </Defs>
-
-        {/* Base arc */}
         <Path
           d={arcPath(0, 1)}
           stroke="rgba(255,255,255,0.13)"
@@ -72,16 +58,10 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
           strokeLinecap="round"
           fill="none"
         />
-
-        {/* Tick marks at quarter positions */}
         {[0.25, 0.5, 0.75].map((t, i) => {
           const [cx, cy] = polar(t);
-          return (
-            <Circle key={i} cx={cx} cy={cy} r={1.6} fill="rgba(255,255,255,0.3)" />
-          );
+          return <Circle key={i} cx={cx} cy={cy} r={1.6} fill="rgba(255,255,255,0.3)" />;
         })}
-
-        {/* Window arc — gradient fades to transparent at both ends for soft look */}
         {hasWin && day.window && (
           <Path
             d={arcPath(day.window.s, day.window.e)}
@@ -91,56 +71,44 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
             fill="none"
           />
         )}
-
-        {/* Window endpoint dots */}
         {winEndpoints.map(([cx, cy], i) => (
           <Circle key={i} cx={cx} cy={cy} r={4.5} fill={accent} />
         ))}
       </Svg>
 
-      {/* Dusk label — bottom left */}
-      <View style={[styles.arcEnd, styles.arcEndLeft]}>
-        <Text style={[styles.arcEndTime, { color: textPrimary }]}>{fmt(loc.dusk)}</Text>
-        <Text style={[styles.arcEndLabel, { color: textFaint }]}>dusk</Text>
-      </View>
-
-      {/* Dawn label — bottom right */}
-      <View style={[styles.arcEnd, styles.arcEndRight]}>
-        <Text style={[styles.arcEndTime, { textAlign: 'right', color: textPrimary }]}>{fmt(loc.dawn)}</Text>
-        <Text style={[styles.arcEndLabel, { textAlign: 'right', color: textFaint }]}>dawn</Text>
-      </View>
-
-      {/* Center overlay */}
+      {/* Center content — inside the arc */}
       <View style={styles.arcCenter} pointerEvents="none">
         {freeMode ? (
           <>
-            <Text style={[styles.arcCap, { color: capColor }]}>
-              {v.label} TONIGHT
-            </Text>
+            <Text style={[styles.arcCap, { color: capColor }]}>{v.label} Tonight</Text>
             <Text style={[styles.arcWinTime, { color: textPrimary }]}>{v.word}</Text>
-            <Text style={[styles.arcSub, { color: textDim }]}>
-              over {loc.name} · {day.cloud}% cloud
-            </Text>
+            <Text style={[styles.arcSub, { color: textDim }]}>over {loc.name} · {day.cloud}% cloud</Text>
           </>
         ) : hasWin && day.window ? (
           <>
-            <Text style={[styles.arcCap, { color: capColor }]}>
-              {v.label} · BEST WINDOW
+            <Text style={[styles.arcCap, { color: capColor }]}>{v.label} · Best Window</Text>
+            <Text style={[styles.arcWinTime, { color: textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+              {fmt(day.window.label)}
             </Text>
-            <Text style={[styles.arcWinTime, { color: textPrimary }]}>{fmt(day.window.label)}</Text>
-            <Text style={[styles.arcSub, { color: textDim }]}>
-              {day.primeDark} of prime darkness · clear by {fmt(day.clearBy)}
-            </Text>
+            <Text style={[styles.arcSub, { color: textDim }]}>{day.primeDark} of prime darkness · clear by {fmt(day.clearBy)}</Text>
           </>
         ) : (
           <>
             <Text style={[styles.arcCap, { color: capColor }]}>{v.label}</Text>
             <Text style={[styles.arcWinTime, { color: textPrimary }]}>No window</Text>
-            <Text style={[styles.arcSub, { color: textDim }]}>
-              {day.cloud}% cloud · {v.word.toLowerCase()} sky tonight
-            </Text>
+            <Text style={[styles.arcSub, { color: textDim }]}>{day.cloud}% cloud · {v.word.toLowerCase()} sky tonight</Text>
           </>
         )}
+      </View>
+
+      {/* Dusk / Dawn — pinned to bottom corners */}
+      <View style={[styles.arcEnd, styles.arcEndLeft]} pointerEvents="none">
+        <Text style={[styles.arcEndTime, { color: textPrimary }]}>{fmt(loc.dusk)}</Text>
+        <Text style={[styles.arcEndLabel, { color: textFaint }]}>Dusk</Text>
+      </View>
+      <View style={[styles.arcEnd, styles.arcEndRight]} pointerEvents="none">
+        <Text style={[styles.arcEndTime, { textAlign: 'right', color: textPrimary }]}>{fmt(loc.dawn)}</Text>
+        <Text style={[styles.arcEndLabel, { textAlign: 'right', color: textFaint }]}>Dawn</Text>
       </View>
     </View>
   );
@@ -149,46 +117,18 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
 const styles = StyleSheet.create({
   hero: {
     marginHorizontal: 22,
-    marginTop: 4,
-    height: 168,
+    marginTop: -16,
+    marginBottom: 8,
     position: 'relative',
   },
   arc: {
     width: '100%',
-    height: 168,
-  },
-  arcEnd: {
-    position: 'absolute',
-    bottom: 12,
-  },
-  arcEndLeft: {
-    left: 2,
-  },
-  arcEndRight: {
-    right: 2,
-    alignItems: 'flex-end',
-  },
-  arcEndTime: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-    lineHeight: 18,
-  },
-  arcEndLabel: {
-    fontFamily: 'HankenGrotesk_600SemiBold',
-    fontSize: 11,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: 'rgba(255,255,255,0.45)',
-    fontWeight: '600',
   },
   arcCenter: {
     position: 'absolute',
-    left: '50%' as unknown as number,
-    top: 78,
-    width: 240,
-    transform: [{ translateX: -120 }],
+    left: 60,
+    right: 60,
+    bottom: 6,
     alignItems: 'center',
   },
   arcCap: {
@@ -199,19 +139,46 @@ const styles = StyleSheet.create({
   },
   arcWinTime: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 27,
+    fontSize: 26,
     fontWeight: '600',
     letterSpacing: -0.3,
     color: '#fff',
-    marginTop: 3,
-    marginBottom: 4,
+    marginTop: 2,
+    marginBottom: 2,
     textAlign: 'center',
+    width: '100%',
   },
   arcSub: {
     fontFamily: 'HankenGrotesk_400Regular',
-    fontSize: 11.5,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.6)',
-    lineHeight: 15,
+    lineHeight: 14,
     textAlign: 'center',
+  },
+  arcEnd: {
+    position: 'absolute',
+    bottom: 6,
+  },
+  arcEndLeft: {
+    left: 2,
+  },
+  arcEndRight: {
+    right: 2,
+    alignItems: 'flex-end',
+  },
+  arcEndTime: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    lineHeight: 17,
+  },
+  arcEndLabel: {
+    fontFamily: 'HankenGrotesk_600SemiBold',
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.45)',
+    fontWeight: '600',
   },
 });

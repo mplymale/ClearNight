@@ -110,7 +110,7 @@ const MAJOR_CITIES: MajorCity[] = [
 // trust that place's measured Bortle over the city-proximity heuristic.
 const DARK_SKY_PROXIMITY_MI = 30;
 
-const FALLBACK_BORTLE = 4;
+const FALLBACK_BORTLE = 5;
 
 export function estimateBortle(lat: number, lon: number): number {
   // 1. Check proximity to known dark sky places first — these have real measured values.

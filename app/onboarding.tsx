@@ -14,17 +14,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+
 import * as Location from 'expo-location';
 import { StarField } from '../src/components/home/StarField';
 import { useLocations } from '../src/context/LocationsContext';
-import { useFavorites } from '../src/context/FavoritesContext';
 import { useInterests } from '../src/context/InterestsContext';
+import { useSubscription } from '../src/context/SubscriptionContext';
 import { mkLocFromPlace } from '../src/data/mockForecast';
 import { DARK_SKY_PLACES } from '../src/data/darkSkyPlaces';
 import { haversineMiles, formatMiles } from '../src/services/geo';
 import { estimateBortle } from '../src/services/bortleEstimate';
-import { getNightBounds } from '../src/services/moon';
-import { computeTonightsSky } from '../src/services/skyObjects';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { AppLogo } from '../src/components/common/AppLogo';
 
@@ -103,6 +102,15 @@ function LocationArrow() {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
       <Path d="M3 11.5L21 3L12.5 21L10.5 13.5L3 11.5Z" fill="#04130f" />
+    </Svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 18 18" fill="none">
+      <Path d="M9 2 C6.2 2 4 4.2 4 7 C4 10.5 9 16 9 16 C9 16 14 10.5 14 7 C14 4.2 11.8 2 9 2 Z" fill={ACCENT} opacity={0.9} />
+      <Circle cx={9} cy={7} r={2} fill="#04130f" />
     </Svg>
   );
 }
@@ -391,7 +399,7 @@ function StepLocation({ onNext }: { onNext: () => void }) {
               results.map((r) => (
                 <TouchableOpacity key={r.key} style={styles.resultRow} onPress={() => handleSearchResult(r)} activeOpacity={0.8}>
                   <View style={styles.resultPin}>
-                    <Text style={{ color: ACCENT, fontSize: 14 }}>◐</Text>
+                    <PinIcon />
                   </View>
                   <View style={styles.resultMain}>
                     <Text style={styles.resultName}>{r.city}</Text>
@@ -406,7 +414,11 @@ function StepLocation({ onNext }: { onNext: () => void }) {
               )
             )
           ) : (
-            nearbySuggestions.map((s) => (
+            <>
+            <Text style={styles.suggestionsLabel}>
+              {userCoords ? 'Nearby dark spots' : 'Popular dark spots'}
+            </Text>
+            {nearbySuggestions.map((s) => (
               <TouchableOpacity key={s.name} style={styles.resultRow} onPress={() => handleSuggestion(s)} activeOpacity={0.8}>
                 <View style={styles.resultPin}>
                   <Text style={{ color: ACCENT, fontSize: 14 }}>◐</Text>
@@ -419,7 +431,8 @@ function StepLocation({ onNext }: { onNext: () => void }) {
                 </View>
                 <Text style={[styles.resultPlus, { color: ACCENT }]}>+</Text>
               </TouchableOpacity>
-            ))
+            ))}
+            </>
           )}
         </View>
 
@@ -435,42 +448,22 @@ function StepLocation({ onNext }: { onNext: () => void }) {
 
 function StepInterests({ onDone }: { onDone: () => void }) {
   const insets = useSafeAreaInsets();
-  const { locations } = useLocations();
-  const { addFavorite } = useFavorites();
   const { setInterests } = useInterests();
+  const { setStatus } = useSubscription();
   const [selected, setSelected] = useState<Record<string, boolean>>({
-    milky: true, deep: true, planets: false, meteors: false,
+    milky: false, deep: false, planets: false, meteors: false,
   });
 
   const toggle = (k: string) => setSelected((p) => ({ ...p, [k]: !p[k] }));
 
   function handleDone() {
-    // The spot added in the previous step is the most recently appended one.
-    const locIndex = locations.length - 1;
-    const loc = locations[locIndex];
-    if (loc) {
-      if (selected.milky) {
-        addFavorite(`${locIndex}-prime-prime`);
-      }
-      if (selected.deep || selected.planets || selected.meteors) {
-        // Compute the *real* tonight's sky here (pure math, no network) so
-        // we favorite the same objects/indices the location will settle on
-        // once its real forecast loads — not the temporary placeholder data.
-        const bounds = getNightBounds(new Date(), loc.latitude, loc.longitude);
-        const sky = computeTonightsSky(loc.latitude, loc.longitude, loc.bortle, bounds.duskUtcMs, bounds.dawnUtcMs);
-        sky.objects.forEach((obj, i) => {
-          if (obj.category === 'deep' && selected.deep) addFavorite(`${locIndex}-object-${i}`);
-          if (obj.category === 'planets' && selected.planets) addFavorite(`${locIndex}-object-${i}`);
-          if (obj.category === 'meteors' && selected.meteors) addFavorite(`${locIndex}-object-${i}`);
-        });
-      }
-    }
     setInterests({
       milky: !!selected.milky,
       deep: !!selected.deep,
       planets: !!selected.planets,
       meteors: !!selected.meteors,
     });
+    setStatus('trial');
     onDone();
   }
 
@@ -693,6 +686,15 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
     paddingVertical: 8,
+  },
+
+  suggestionsLabel: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.35)',
+    marginBottom: 8,
   },
 
   // Results

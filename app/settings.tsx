@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   LayoutChangeEvent,
+  Linking,
   Modal,
   PanResponder,
   ScrollView,
@@ -10,12 +11,14 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { usePreferences, formatQuietHours } from '../src/context/PreferencesContext';
 import { useAlerts } from '../src/context/AlertsContext';
+import { useSubscription } from '../src/context/SubscriptionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
 
@@ -354,6 +357,7 @@ export default function SettingsScreen() {
   const { nightVision, setNightVision } = useNightVision();
   const { use24h, setUse24h, useCelsius, setUseCelsius, useKnots, setUseKnots, quietStart, quietEnd, setQuietStart, setQuietEnd } = usePreferences();
   const { alerts, toggleAlert, clearAlert } = useAlerts();
+  const { setStatus } = useSubscription();
 
   const isPremium = tier === 'premium';
   const unlocked = tier !== 'free';
@@ -509,7 +513,7 @@ export default function SettingsScreen() {
               <View style={styles.lockedRow}>
                 <View style={styles.lockedMain}>
                   <View style={styles.lockedNameRow}>
-                    <Text style={[styles.rowName, { color: textPrimary }]}>GO alerts</Text>
+                    <Text style={[styles.rowName, { color: textPrimary }]}>Sky alerts</Text>
                     <PremPill />
                   </View>
                   <Text style={[styles.rowSub, { color: textDim }]}>
@@ -568,6 +572,13 @@ export default function SettingsScreen() {
               nameColor={textPrimary}
             />
             <Row
+              name="Send Feedback"
+              right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
+              onPress={() => router.push('/feedback')}
+              divider={rowDivider}
+              nameColor={textPrimary}
+            />
+            <Row
               name="Privacy Policy"
               right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
               onPress={() => router.push('/privacy-policy')}
@@ -581,6 +592,19 @@ export default function SettingsScreen() {
               divider={rowDivider}
               nameColor={textPrimary}
             />
+            {__DEV__ && (
+              <Row
+                name="Reset onboarding"
+                sub="Clears all data and restarts from intro"
+                onPress={async () => {
+                  await AsyncStorage.clear();
+                  setStatus('trial');
+                  router.replace('/intro');
+                }}
+                divider={rowDivider}
+                nameColor="rgba(255,100,100,0.9)" subColor={textDim}
+              />
+            )}
             <Row
               name="About ClearNight"
               sub="Version 1.0"

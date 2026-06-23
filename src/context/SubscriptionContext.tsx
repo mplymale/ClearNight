@@ -22,7 +22,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   // Defaults to 'trial' so a fresh install behaves like today's "premium
   // trial" demo experience until the user actually subscribes or the trial
   // is explicitly ended.
-  const [status, setStatusState] = useState<SubscriptionStatus>('free');
+  const [status, setStatusState] = useState<SubscriptionStatus>('trial');
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {

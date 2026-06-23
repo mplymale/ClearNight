@@ -186,10 +186,13 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
                 fireDate = duskMs ? new Date(duskMs) : new Date(dayBase.getTime());
                 if (!duskMs) fireDate.setHours(18, 0, 0, 0);
               }
-              title = `Skies are clearing over ${loc.name}`;
+              const verdict = loc.days[i].verdict.toUpperCase();
+              title = timing === 'dayBefore'
+                ? `${verdict} night ahead at ${loc.name}`
+                : `${verdict} — skies are open at ${loc.name}`;
               body = timing === 'dayBefore'
-                ? `${loc.name} looks clear tomorrow night — score ${loc.days[i].score}.`
-                : `Tonight looks good at ${loc.name} — score ${loc.days[i].score}. Time to head out.`;
+                ? `Tomorrow night is looking ${verdict} — score ${loc.days[i].score}. Plan your session.`
+                : `Score ${loc.days[i].score} tonight at ${loc.name}. Time to head out.`;
             } else if (targetMatch) {
               const type = targetMatch[2] as 'prime' | 'object';
               const objIndex = targetMatch[3];
@@ -207,10 +210,13 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
               } else {
                 fireDate = windowStart;
               }
-              title = `${rec.label} is up ${nightLabel}`;
+              const targetVerdict = loc.days[i].verdict.toUpperCase();
+              title = timing === 'dayBefore'
+                ? `${rec.label} is up tomorrow night`
+                : `${rec.label} window is open now`;
               body = timing === 'dayBefore'
-                ? `${rec.label} should be visible tomorrow night — score ${loc.days[i].score}.`
-                : `${rec.label}'s window is starting — score ${loc.days[i].score}.`;
+                ? `${targetVerdict} conditions tomorrow — score ${loc.days[i].score}. Good night for ${rec.label}.`
+                : `${targetVerdict} skies — score ${loc.days[i].score}. ${rec.label} is visible now.`;
             } else {
               continue;
             }

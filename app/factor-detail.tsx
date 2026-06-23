@@ -264,10 +264,11 @@ function getContent(
       const wind = applyWindFormat(day.windKmh ?? 0, useKnots);
       const label = windLabel(day.windKmh ?? 0);
       return {
-        title: label,
+        title: 'Wind',
         valueLine: (
           <Text style={[styles.headerValue, { color: accent }]}>
             {wind.value} {wind.unit}
+            <Text style={styles.headerValueSub}> · {label}</Text>
           </Text>
         ),
         description: label === 'Calm'
@@ -288,16 +289,22 @@ function getContent(
 
     case 'humidity': {
       const h = day.humidity ?? 0;
+      const p = day.precipProb ?? 0;
+      const rainNote = p >= 60 ? ' Rain is likely tonight.' : p >= 30 ? ' Some chance of rain — keep an eye on conditions.' : '';
       return {
-        title: 'Humidity',
-        valueLine: <Text style={[styles.headerValue, { color: accent }]}>{h}%</Text>,
+        title: 'Humidity & Rain',
+        valueLine: (
+          <Text style={[styles.headerValue, { color: accent }]}>
+            {h}%{p > 0 ? ` · ${p}% rain` : ''}
+          </Text>
+        ),
         description: h < 40
-          ? 'Dry air tonight — excellent transparency and no risk of dew forming on your optics.'
+          ? `Dry air tonight — excellent transparency and no risk of dew forming on your optics.${rainNote}`
           : h < 60
-          ? 'Moderate humidity. Atmospheric clarity is good; dew is unlikely but worth monitoring on longer sessions.'
+          ? `Moderate humidity. Atmospheric clarity is good; dew is unlikely but worth monitoring on longer sessions.${rainNote}`
           : h < 80
-          ? 'High humidity will reduce transparency and haze out faint targets. Dew heaters recommended if you have them.'
-          : 'Very high humidity — expect dew on optics and hazy skies. Transparency will be poor for deep-sky work.',
+          ? `High humidity will reduce transparency and haze out faint targets. Dew heaters recommended if you have them.${rainNote}`
+          : `Very high humidity — expect dew on optics and hazy skies. Transparency will be poor for deep-sky work.${rainNote}`,
         getValue: (d: DayForecast) => (d.humidity ?? 0) / 100,
         getQuality: (d: DayForecast) => 1 - (d.humidity ?? 0) / 100,
         caption: 'lower = drier = better',

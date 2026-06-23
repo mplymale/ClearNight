@@ -93,7 +93,7 @@ const PLANS: { id: string; name: string; amt: string; per: string; note: string;
 const FEATURE_DEFS: { Icon: React.ComponentType<{ color: string }>; text: string }[] = [
   { Icon: IcSpots,  text: 'Unlimited saved spots' },
   { Icon: IcWeek,   text: 'Full 7-night forecast' },
-  { Icon: IcAlert,  text: 'GO alerts + lookahead' },
+  { Icon: IcAlert,  text: 'Sky alerts + lookahead' },
   { Icon: IcTarget, text: 'Prime targets & timing' },
   { Icon: IcHour,   text: 'Hour-by-hour clarity' },
   { Icon: IcGear,   text: 'Gear-tuned scoring' },
@@ -129,7 +129,7 @@ function SuccessView({ returnTo, locIndex, type, objIndex }: {
         </View>
         <Text style={[styles.successTitle, { color: textPrimary }]}>You're all set</Text>
         <Text style={[styles.successBody, { color: textDim }]}>
-          ClearNight Premium is unlocked. Every spot, the full week, and GO alerts the moment your sky clears.
+          ClearNight Premium is unlocked. Every spot, the full week, and alerts the moment your sky clears.
         </Text>
         <TouchableOpacity style={[styles.ctaBtn, { maxWidth: 280, alignSelf: 'center', width: '100%', marginTop: 0, backgroundColor: nvAccent }]} onPress={handleContinue} activeOpacity={0.85}>
           <Text style={styles.ctaBtnText}>Start exploring</Text>

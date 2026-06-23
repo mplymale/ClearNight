@@ -3,9 +3,9 @@ import { LayoutChangeEvent, PanResponder, StyleSheet, Text, View } from 'react-n
 import { LinearGradient } from 'expo-linear-gradient';
 
 export function verdictWordForThreshold(value: number): string {
-  if (value >= 78) return 'GO';
-  if (value >= 62) return 'GO';
-  if (value >= 42) return 'COND';
+  if (value >= 78) return 'Excellent';
+  if (value >= 62) return 'Good';
+  if (value >= 42) return 'Fair';
   return 'Any';
 }
 
