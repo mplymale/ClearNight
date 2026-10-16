@@ -17,11 +17,16 @@ interface AlertData {
   };
 }
 
+type PushData =
+  | { kind: 'location'; locationName: string }
+  | { kind: 'target'; locationName: string; targetType: 'prime' | 'object'; objIndex?: number };
+
 interface PushMessage {
   to: string;
   title: string;
   body: string;
   sound: 'default';
+  data: PushData;
 }
 
 Deno.serve(async (req) => {
@@ -34,7 +39,7 @@ Deno.serve(async (req) => {
     // 1. Load all enabled alerts
     const { data: alertRows, error: alertErr } = await supabase
       .from('alerts')
-      .select('user_id, key, data');
+      .select('user_id, key, data, last_notified_at');
 
     if (alertErr) throw alertErr;
 
@@ -53,9 +58,13 @@ Deno.serve(async (req) => {
     }
 
     // 3. Load forecasts for each user's locations
+    // Ordered by sort_order to match the client's own location array order —
+    // alert keys like "alert-loc-0" reference that positional index, so a
+    // mismatched order here silently resolves to the wrong location (or none).
     const { data: locationRows, error: locErr } = await supabase
       .from('locations')
-      .select('user_id, name, latitude, longitude, bortle');
+      .select('user_id, name, latitude, longitude, bortle, sort_order, tonight_score, has_window')
+      .order('sort_order');
 
     if (locErr) throw locErr;
 
@@ -65,7 +74,16 @@ Deno.serve(async (req) => {
       locationsByUser.get(loc.user_id)!.push(loc);
     }
 
-    const messages: PushMessage[] = [];
+    // Keyed by token (not pushed to a flat array) so that if several
+    // Supabase user_ids — e.g. leftover "ghost" anonymous accounts from
+    // before sessions were persisted client-side — all resolve to the same
+    // physical device's push token, that device still only gets ONE
+    // message per run instead of one per stale account.
+    const messagesByToken = new Map<string, PushMessage>();
+    // Alerts that qualify this run — mark these as notified afterward so a
+    // config that stays clear all night doesn't re-fire on every hourly run.
+    const notifiedAlerts: { user_id: string; key: string }[] = [];
+    const now = new Date();
 
     // 4. For each user, check their alerts against forecast scores
     const userIds = new Set((alertRows ?? []).map(r => r.user_id));
@@ -81,35 +99,79 @@ Deno.serve(async (req) => {
         const alert = alertRow.data as AlertData;
         if (!alert.enabled) continue;
 
-        // Match alert key to location index
-        const locMatch = alertRow.key.match(/^alert-loc-(\d+)$/);
-        if (!locMatch) continue;
+        // Already sent once today — skip regardless of how many times this
+        // hour's cron run repeats while conditions stay good.
+        if (alertRow.last_notified_at && isSameUtcDay(new Date(alertRow.last_notified_at), now)) continue;
 
-        const locIndex = parseInt(locMatch[1], 10);
+        // Match alert key to location index — either a location alert or a
+        // target alert (prime target / specific object) for that location.
+        const locMatch = alertRow.key.match(/^alert-loc-(\d+)$/);
+        const targetMatch = alertRow.key.match(/^alert-(\d+)-(prime|object)-(.*)$/);
+        const locIndex = locMatch
+          ? parseInt(locMatch[1], 10)
+          : targetMatch
+          ? parseInt(targetMatch[1], 10)
+          : -1;
+        if (locIndex < 0) continue;
+
         const loc = userLocations[locIndex];
         if (!loc) continue;
 
-        // Fetch tonight's forecast score from Open-Meteo
-        const score = await fetchNightScore(loc.latitude, loc.longitude);
+        // Use the score/window the app itself already computed and synced —
+        // not an independent recalculation — so this can never disagree with
+        // what the user sees on screen. No score yet (never refreshed) or no
+        // real contiguous clear window both mean "doesn't qualify." Target
+        // alerts piggyback on the same location-level score/window: a
+        // target's own visibility window is static per location (not
+        // date-dependent), so the location's nightly conditions are what
+        // actually decide whether tonight qualifies.
+        if (loc.tonight_score == null || !loc.has_window) continue;
+        const score = loc.tonight_score;
         if (score < alert.preference.threshold) continue;
 
         const verdict = scoreToVerdict(score);
         const isEvening = alert.preference.timing === 'evening';
 
-        const title = isEvening
-          ? `${verdict} — skies are open at ${loc.name}`
-          : `${verdict} night ahead at ${loc.name}`;
-        const body = isEvening
-          ? `Score ${score} tonight at ${loc.name}. Time to head out.`
-          : `Tomorrow night is looking ${verdict} — score ${score}. Plan your session.`;
+        let title: string;
+        let body: string;
+        let data: PushData;
+
+        if (locMatch) {
+          title = isEvening
+            ? `${verdict} — skies are open at ${loc.name}`
+            : `${verdict} night ahead at ${loc.name}`;
+          body = isEvening
+            ? `Score ${score} tonight at ${loc.name}. Time to head out.`
+            : `Tomorrow night is looking ${verdict} — score ${score}. Plan your session.`;
+          data = { kind: 'location', locationName: loc.name };
+        } else {
+          const targetType = targetMatch![2] as 'prime' | 'object';
+          const objIndexStr = targetMatch![3];
+          title = isEvening
+            ? `${alert.label} window is open now`
+            : `${alert.label} is up tomorrow night`;
+          body = isEvening
+            ? `${verdict} skies — score ${score}. ${alert.label} is visible now.`
+            : `${verdict} conditions tomorrow — score ${score}. Good night for ${alert.label}.`;
+          data = {
+            kind: 'target',
+            locationName: loc.name,
+            targetType,
+            objIndex: targetType === 'object' ? parseInt(objIndexStr, 10) : undefined,
+          };
+        }
 
         for (const token of tokens) {
-          messages.push({ to: token, title, body, sound: 'default' });
+          if (!messagesByToken.has(token)) {
+            messagesByToken.set(token, { to: token, title, body, sound: 'default', data });
+          }
         }
+        notifiedAlerts.push({ user_id: userId, key: alertRow.key });
       }
     }
 
     // 5. Send all messages in batches of 100 (Expo limit)
+    const messages = Array.from(messagesByToken.values());
     const results = [];
     for (let i = 0; i < messages.length; i += 100) {
       const batch = messages.slice(i, i + 100);
@@ -119,6 +181,16 @@ Deno.serve(async (req) => {
         body: JSON.stringify(batch),
       });
       results.push(await res.json());
+    }
+
+    // 6. Mark qualifying alerts as notified so this run's matches don't
+    // fire again on the next hourly check tonight.
+    for (const { user_id, key } of notifiedAlerts) {
+      await supabase
+        .from('alerts')
+        .update({ last_notified_at: now.toISOString() })
+        .eq('user_id', user_id)
+        .eq('key', key);
     }
 
     return new Response(
@@ -131,21 +203,10 @@ Deno.serve(async (req) => {
   }
 });
 
-// Fetch average cloud cover for tonight (dusk to dawn) from Open-Meteo
-async function fetchNightScore(lat: number, lon: number): Promise<number> {
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=cloudcover&timezone=auto&forecast_days=2`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const clouds: number[] = json.hourly?.cloudcover ?? [];
-    // Use hours 20-28 (8pm to 4am) as a rough night window
-    const nightSlice = clouds.slice(20, 28);
-    if (nightSlice.length === 0) return 0;
-    const avgCloud = nightSlice.reduce((a, b) => a + b, 0) / nightSlice.length;
-    return Math.round(100 - avgCloud);
-  } catch {
-    return 0;
-  }
+function isSameUtcDay(a: Date, b: Date): boolean {
+  return a.getUTCFullYear() === b.getUTCFullYear()
+    && a.getUTCMonth() === b.getUTCMonth()
+    && a.getUTCDate() === b.getUTCDate();
 }
 
 function scoreToVerdict(score: number): string {
