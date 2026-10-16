@@ -33,6 +33,14 @@ export interface AlertRecord {
   enabled: boolean;
   preference: AlertPreference;
   fires: ScheduledFire[];
+  // Calendar date (device-local toDateString()) of the most recent
+  // immediate "fire right now" notification for this alert. Persisted so
+  // an immediate fire can happen at most once per calendar day even
+  // across an app close/reopen -- closing the app shortly after a fire
+  // can otherwise race the fire-and-forget persistence effect below,
+  // losing the record of having already fired and causing a duplicate on
+  // the next cold start.
+  lastImmediateFireDate?: string;
 }
 
 interface AlertsCtx {
@@ -104,6 +112,16 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   // ever lands.
   const evalSeqRef = useRef(0);
 
+  // Synchronous, in-memory guard against *multiple overlapping*
+  // evaluateAndSchedule() calls -- normal during cold-start, where
+  // locations/alerts hydrate in several stages -- each independently
+  // deciding to mint an immediate "fire now" notification before any of
+  // their state updates have landed. Checked/claimed synchronously,
+  // before any `await`, the moment an immediate fire is decided, so a
+  // second concurrent run sees the claim even though React state hasn't
+  // re-rendered (and AsyncStorage hasn't been written) yet.
+  const firedTodayRef = useRef<Record<string, string>>({});
+
   useEffect(() => {
     (async () => {
       try {
@@ -166,6 +184,7 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayStr = new Date().toDateString();
 
     // Only fires get committed below — never the rest of the record. This
     // run captures `rec` at the start of a (possibly long) async pass; if
@@ -173,6 +192,11 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
     // spreading the stale captured `rec` back in would silently undo that
     // change (e.g. a toggle-off flipping back to enabled).
     const updates: Record<string, ScheduledFire[]> = {};
+    // Keyed the same as `updates` -- records that THIS run decided to
+    // mint a brand-new immediate fire for that alert key, so it can be
+    // persisted (both to state and, awaited, to AsyncStorage) alongside
+    // the schedule itself.
+    const dateUpdates: Record<string, string> = {};
 
     for (const [key, rec] of Object.entries(alerts)) {
       if (!rec.enabled) continue;
@@ -209,6 +233,14 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
       // notification on every locations/alerts refresh.
       const existingByDay = new Map(rec.fires.map(f => [f.dayIndex, f]));
 
+      // True if this alert already sent an immediate "fire now"
+      // notification today -- either recorded in persisted state (from a
+      // previous app session) or claimed moments ago by another
+      // evaluateAndSchedule() run racing this one during cold-start
+      // hydration. Checked once per key since only "today" (dayIndex 0)
+      // can ever hit the immediate-fire branches below.
+      const alreadyFiredToday = rec.lastImmediateFireDate === todayStr || firedTodayRef.current[key] === todayStr;
+
       // Plan the target fires first, without actually scheduling anything —
       // scheduleLocalAlert has a side effect (it creates a real OS
       // notification), so we don't want to run it until we know the plan
@@ -244,7 +276,18 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
               // (app foreground, locations refresh, etc.) looks like a
               // brand new plan and fires a duplicate notification.
               const existing = existingByDay.get(i);
-              fireDate = existing ? new Date(existing.fireDateMs) : new Date(rightNow + 2000);
+              if (existing) {
+                fireDate = new Date(existing.fireDateMs);
+              } else if (alreadyFiredToday) {
+                // Already fired immediately today for this alert -- don't
+                // mint a second one. A past fireDate gets dropped from the
+                // plan by the check below, same as any other elapsed fire.
+                fireDate = new Date(0);
+              } else {
+                fireDate = new Date(rightNow + 2000);
+                firedTodayRef.current[key] = todayStr;
+                dateUpdates[key] = todayStr;
+              }
             } else {
               fireDate = duskMs ? new Date(duskMs) : new Date(dayBase.getTime());
               if (!duskMs) fireDate.setHours(18, 0, 0, 0);
@@ -283,7 +326,15 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
               // instead of minting a fresh Date.now() — see the matching
               // comment in the location branch above.
               const existing = existingByDay.get(i);
-              fireDate = existing ? new Date(existing.fireDateMs) : new Date(rightNow + 2000);
+              if (existing) {
+                fireDate = new Date(existing.fireDateMs);
+              } else if (alreadyFiredToday) {
+                fireDate = new Date(0);
+              } else {
+                fireDate = new Date(rightNow + 2000);
+                firedTodayRef.current[key] = todayStr;
+                dateUpdates[key] = todayStr;
+              }
             } else {
               fireDate = windowStart;
             }
@@ -324,10 +375,10 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
       updates[key] = scheduled;
     }
 
-    if (Object.keys(updates).length === 0) return;
+    if (Object.keys(updates).length === 0 && Object.keys(dateUpdates).length === 0) return;
 
     // A newer evaluateAndSchedule call started (and may already have
-    // finished) after this one — its result is fresher, so don't let this
+    // finished) after this one -- its result is fresher, so don't let this
     // stale pass clobber it.
     if (mySeq !== evalSeqRef.current) return;
 
@@ -337,8 +388,38 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
         if (!next[key]) continue; // cleared while this run was in flight
         next[key] = { ...next[key], fires };
       }
+      for (const [key, dateStr] of Object.entries(dateUpdates)) {
+        if (!next[key]) continue;
+        next[key] = { ...next[key], lastImmediateFireDate: dateStr };
+      }
       return next;
     });
+
+    // Persist the "already fired today" marker immediately (awaited)
+    // rather than relying solely on the separate reactive persistence
+    // effect above -- that effect is fire-and-forget, so if the app is
+    // closed quickly after an immediate fire, its write can lose the race
+    // and the marker never reaches disk, causing a duplicate fire on the
+    // next cold start.
+    if (Object.keys(dateUpdates).length > 0) {
+      try {
+        const rawCurrent = await AsyncStorage.getItem(STORAGE_KEY);
+        const parsed: Record<string, AlertRecord> = rawCurrent ? JSON.parse(rawCurrent) : {};
+        for (const [key, dateStr] of Object.entries(dateUpdates)) {
+          const base = parsed[key] ?? alerts[key];
+          if (!base) continue;
+          parsed[key] = {
+            ...base,
+            fires: updates[key] ?? base.fires,
+            lastImmediateFireDate: dateStr,
+          };
+        }
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // Best effort -- the in-memory firedTodayRef guard still prevents
+        // a duplicate within this session either way.
+      }
+    }
   };
 
   // Trigger re-evaluation here, at the provider root, rather than from a
