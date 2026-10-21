@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +12,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
-import { useSubscription } from '../src/context/SubscriptionContext';
+import Purchases, { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
+import { PREMIUM_ENTITLEMENT_ID, useSubscription } from '../src/context/SubscriptionContext';
 import { useNightVision, NV_ACCENT, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { AppLogo } from '../src/components/common/AppLogo';
 import { CheckIcon } from '../src/components/common/CheckIcon';
@@ -141,9 +144,15 @@ function SuccessView({ returnTo, locIndex, type, objIndex }: {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
+function packageForPlan(offering: PurchasesOffering | null, id: 'annual' | 'monthly' | 'lifetime'): PurchasesPackage | null {
+  if (!offering) return null;
+  if (id === 'annual') return offering.annual;
+  if (id === 'monthly') return offering.monthly;
+  return offering.lifetime;
+}
+
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
-  const { setStatus } = useSubscription();
   const { nightVision } = useNightVision();
   const nvAccent = nightVision ? NV_ACCENT : ACCENT;
   const textPrimary = nightVision ? NV_TEXT : '#fff';
@@ -157,18 +166,66 @@ export default function PaywallScreen() {
   }>();
   const [plan, setPlan] = useState<'annual' | 'monthly' | 'lifetime'>('annual');
   const [done, setDone] = useState(false);
+  const [offering, setOffering] = useState<PurchasesOffering | null>(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const { setDevPreview } = useSubscription();
+
+  useEffect(() => {
+    Purchases.getOfferings()
+      .then((offerings) => setOffering(offerings.current))
+      .catch(() => {});
+  }, []);
+
+  async function handlePurchase() {
+    const pkg = packageForPlan(offering, plan);
+    if (!pkg) {
+      Alert.alert('Not available', 'This plan is not available right now. Please try again in a moment.');
+      return;
+    }
+    setPurchasing(true);
+    try {
+      await Purchases.purchasePackage(pkg);
+      setDevPreview(null); // a real purchase should always show real status, even mid-preview
+      setDone(true);
+    } catch (e: any) {
+      if (!e?.userCancelled) {
+        Alert.alert('Purchase failed', 'Something went wrong. Please try again.');
+      }
+    } finally {
+      setPurchasing(false);
+    }
+  }
+
+  async function handleRestore() {
+    setRestoring(true);
+    try {
+      const info = await Purchases.restorePurchases();
+      if (info.entitlements.active[PREMIUM_ENTITLEMENT_ID]) {
+        setDevPreview(null);
+        setDone(true);
+      } else {
+        Alert.alert('No purchases found', "We couldn't find any previous purchases to restore.");
+      }
+    } catch {
+      Alert.alert('Restore failed', 'Something went wrong. Please try again.');
+    } finally {
+      setRestoring(false);
+    }
+  }
 
   if (done) return <SuccessView returnTo={returnTo} locIndex={locIndex} type={type} objIndex={objIndex} />;
 
   const sel = PLANS.find((p) => p.id === plan)!;
+  const selAmt = packageForPlan(offering, plan)?.product.priceString ?? sel.amt;
   const ctaLabel = plan === 'lifetime'
-    ? `Unlock forever — $29.99`
+    ? `Unlock forever — ${selAmt}`
     : `Start 7-day free trial`;
   const ctaNote = plan === 'annual'
-    ? 'Free for 7 days, then $12.99/year. Cancel anytime.'
+    ? `Free for 7 days, then ${selAmt}/year. Cancel anytime.`
     : plan === 'monthly'
-    ? 'Free for 7 days, then $1.99/month. Cancel anytime.'
-    : 'One payment of $29.99. No subscription, ever.';
+    ? `Free for 7 days, then ${selAmt}/month. Cancel anytime.`
+    : `One payment of ${selAmt}. No subscription, ever.`;
 
   return (
     <LinearGradient colors={nightVision ? ['#100200', '#1a0400', '#200500'] : ['#04060e', '#06121f', '#0a1e2e']} style={styles.container}>
@@ -180,13 +237,14 @@ export default function PaywallScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}
+        style={styles.scrollFlex}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 48 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Hero */}
         <View style={styles.hero}>
           <AppLogo size={90} />
-          <Text style={[styles.kicker, { color: nvAccent }]}>ClearNight Premium</Text>
+          <Text style={[styles.kicker, { color: textPrimary }]}>Clear<Text style={{ color: nvAccent }}>Night</Text> Premium</Text>
           <Text style={[styles.heroTitle, { color: textPrimary }]}>Never miss a clear night</Text>
           <Text style={[styles.heroSub, { color: textDim }]}>
             Plan ahead, chase every GO window, and get a nudge the moment the sky opens up.
@@ -209,6 +267,7 @@ export default function PaywallScreen() {
         <View style={styles.plans}>
           {PLANS.map((p) => {
             const on = plan === p.id;
+            const amt = packageForPlan(offering, p.id as any)?.product.priceString ?? p.amt;
             return (
               <TouchableOpacity
                 key={p.id}
@@ -239,7 +298,7 @@ export default function PaywallScreen() {
 
                 {/* Price */}
                 <View style={styles.planPrice}>
-                  <Text style={[styles.planAmt, { color: textPrimary }]}>{p.amt}</Text>
+                  <Text style={[styles.planAmt, { color: textPrimary }]}>{amt}</Text>
                   <Text style={[styles.planPer, { color: textFaint }]}>{p.per}</Text>
                 </View>
               </TouchableOpacity>
@@ -249,28 +308,24 @@ export default function PaywallScreen() {
 
         {/* CTA */}
         <TouchableOpacity
-          style={[styles.ctaBtn, { backgroundColor: nvAccent }]}
-          onPress={() => {
-            // Checkout "succeeded" — stop showing the trial nag everywhere
-            // else in the app from this point on.
-            setStatus('subscribed');
-            setDone(true);
-          }}
+          style={[styles.ctaBtn, { backgroundColor: nvAccent }, purchasing && { opacity: 0.6 }]}
+          onPress={handlePurchase}
+          disabled={purchasing}
           activeOpacity={0.85}
         >
-          <Text style={styles.ctaBtnText}>{ctaLabel}</Text>
+          <Text style={styles.ctaBtnText}>{purchasing ? 'Processing…' : ctaLabel}</Text>
         </TouchableOpacity>
         <Text style={[styles.ctaNote, { color: textFaint }]}>{ctaNote}</Text>
 
-        <TouchableOpacity activeOpacity={0.7} style={styles.restoreBtn}>
-          <Text style={[styles.restoreText, { color: nvAccent }]}>Restore purchase</Text>
+        <TouchableOpacity activeOpacity={0.7} style={styles.restoreBtn} onPress={handleRestore} disabled={restoring}>
+          <Text style={[styles.restoreText, { color: nvAccent }]}>{restoring ? 'Restoring…' : 'Restore purchase'}</Text>
         </TouchableOpacity>
 
         <Text style={[styles.legal, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.34)' }]}>
           Payment is charged to your App Store account. Subscriptions auto-renew unless cancelled at least 24h before the period ends.{'  '}
-          <Text style={{ textDecorationLine: 'underline' }}>Terms</Text>
+          <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL('https://clearnightapp.com/terms')}>Terms</Text>
           {'  '}
-          <Text style={{ textDecorationLine: 'underline' }}>Privacy Policy</Text>
+          <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL('https://clearnightapp.com/privacy')}>Privacy Policy</Text>
         </Text>
       </ScrollView>
     </LinearGradient>
@@ -294,17 +349,18 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
   },
 
+  scrollFlex: { flex: 1 },
   scroll: {
     paddingHorizontal: 22,
-    paddingTop: 8,
+    paddingTop: 4,
   },
 
   // Hero
   hero: {
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingBottom: 22,
-    gap: 6,
+    paddingVertical: 0,
+    paddingBottom: 8,
+    gap: 4,
   },
   kicker: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
@@ -339,7 +395,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    paddingBottom: 24,
+    paddingBottom: 14,
   },
   feat: {
     width: '47%',
@@ -446,7 +502,7 @@ const styles = StyleSheet.create({
 
   // CTA
   ctaBtn: {
-    marginTop: 20,
+    marginTop: 14,
     borderRadius: 999,
     backgroundColor: ACCENT,
     paddingVertical: 18,
@@ -463,12 +519,12 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: 'rgba(255,255,255,0.5)',
     textAlign: 'center',
-    marginTop: 11,
+    marginTop: 8,
     lineHeight: 17,
   },
   restoreBtn: {
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 8,
   },
   restoreText: {
     fontFamily: 'HankenGrotesk_500Medium',

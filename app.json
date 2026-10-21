@@ -3,10 +3,10 @@
     "name": "ClearNight",
     "slug": "clearnight",
     "scheme": "clearnight",
-    "version": "1.0.0",
-    "buildNumber": "1",
+    "version": "1.0.5",
+    "buildNumber": "19",
     "orientation": "portrait",
-    "icon": "./assets/clearnight-icon.png",
+    "icon": "./assets/Icon/ClearNight-AppIcon-1024.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#04060e",
     "ios": {
@@ -16,7 +16,6 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "ClearNight uses your location to show local dark-sky conditions and nearby stargazing spots.",
         "UIBackgroundModes": [
-          "fetch",
           "fetch"
         ],
         "ITSAppUsesNonExemptEncryption": false
@@ -38,14 +37,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "splash": {
-      "image": "./assets/clearnight-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#04060e"
-    },
     "plugins": [
       "expo-router",
-      "expo-splash-screen",
+      "./plugins/withSiriIntents",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#04060e"
+        }
+      ],
       [
         "expo-location",
         {

@@ -33,7 +33,7 @@ export default function TermsScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        <Text style={styles.updated}>Last updated: June 2026</Text>
+        <Text style={styles.updated}>Last updated: July 15, 2026</Text>
 
         <Section title="Acceptance of Terms">
           By downloading or using ClearNight, you agree to be bound by these Terms of Use. If you do not agree to these terms, please do not use the app.
@@ -44,7 +44,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="Subscriptions">
-          {"ClearNight Premium is available as a monthly or annual auto-renewing subscription. Payment is charged to your Apple ID account at confirmation of purchase. Subscriptions automatically renew unless canceled at least 24 hours before the end of the current period.\n\nYou can manage or cancel your subscription in your Apple ID account settings. No refunds are provided for unused portions of a subscription period."}
+          {"ClearNight Premium is available as a monthly, annual, or lifetime purchase. Monthly and annual are auto-renewing subscriptions, charged to your Apple ID account at confirmation of purchase, and automatically renew unless canceled at least 24 hours before the end of the current period. Lifetime is a one-time purchase with no recurring charge.\n\nYou can manage or cancel your subscription in your Apple ID account settings. No refunds are provided for unused portions of a subscription period."}
         </Section>
 
         <Section title="Free Trial">

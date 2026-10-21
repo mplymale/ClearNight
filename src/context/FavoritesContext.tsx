@@ -5,16 +5,20 @@ const STORAGE_KEY = 'clearnight:favorites';
 
 interface FavoritesCtx {
   favorites: Set<string>;
+  hydrated: boolean;
   toggleFavorite: (key: string) => void;
   addFavorite: (key: string) => void;
   isFavorite: (key: string) => boolean;
+  removeLocationFavorites: (removedIndex: number) => void;
 }
 
 const FavoritesContext = createContext<FavoritesCtx>({
   favorites: new Set(),
+  hydrated: false,
   toggleFavorite: () => {},
   addFavorite: () => {},
   isFavorite: () => false,
+  removeLocationFavorites: () => {},
 });
 
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
@@ -52,8 +56,25 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
 
   const isFavorite = (key: string) => favorites.has(key);
 
+  // Drop all favorites for the removed location and shift higher-index locations down.
+  const removeLocationFavorites = (removedIndex: number) =>
+    setFavorites((prev) => {
+      const next = new Set<string>();
+      for (const key of prev) {
+        const parts = key.split('-');
+        const loc = Number(parts[0]);
+        if (loc === removedIndex) continue; // drop this location's favorites
+        if (loc > removedIndex) {
+          next.add(`${loc - 1}-${parts.slice(1).join('-')}`); // shift down
+        } else {
+          next.add(key);
+        }
+      }
+      return next;
+    });
+
   return (
-    <FavoritesContext.Provider value={{ favorites, toggleFavorite, addFavorite, isFavorite }}>
+    <FavoritesContext.Provider value={{ favorites, hydrated, toggleFavorite, addFavorite, isFavorite, removeLocationFavorites }}>
       {children}
     </FavoritesContext.Provider>
   );

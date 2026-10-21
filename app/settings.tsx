@@ -1,9 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
+  Animated,
+  Easing,
   LayoutChangeEvent,
   Linking,
   Modal,
   PanResponder,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,9 +21,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { usePreferences, formatQuietHours } from '../src/context/PreferencesContext';
-import { useAlerts } from '../src/context/AlertsContext';
+import { AlertRecord, useAlerts } from '../src/context/AlertsContext';
+import { useLocations } from '../src/context/LocationsContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
+import { supabase } from '../src/lib/supabase';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
 
 type Tier = 'free' | 'trial' | 'premium';
@@ -255,6 +261,163 @@ function QuietHoursPicker({
   );
 }
 
+function formatFireDate(ms: number, use24h: boolean): string {
+  const d = new Date(ms);
+  const now = new Date();
+  const dayMs = 86400000;
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(d) - startOfDay(now)) / dayMs);
+
+  const time = d.toLocaleTimeString([], use24h
+    ? { hour: '2-digit', minute: '2-digit', hour12: false }
+    : { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  if (diffDays === 0) return `Tonight — ${time}`;
+  if (diffDays === 1) return `Tomorrow — ${time}`;
+  const dateLabel = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return `${dateLabel} — ${time}`;
+}
+
+function nightsModeLabel(rec: AlertRecord): string {
+  if (rec.preference.nightsMode === 'weekends') return 'Weekends only';
+  if (rec.preference.nightsMode === 'pick') {
+    const n = rec.preference.pickedDays?.length ?? 0;
+    return `${n} picked night${n !== 1 ? 's' : ''}`;
+  }
+  return 'Any qualifying night';
+}
+
+function AlertDetailsSheet({
+  visible,
+  alert,
+  accent,
+  use24h,
+  onClose,
+}: {
+  visible: boolean;
+  alert: AlertRecord | null;
+  accent: string;
+  use24h: boolean;
+  onClose: () => void;
+}) {
+  const fires = [...(alert?.fires ?? [])].sort((a, b) => a.fireDateMs - b.fireDateMs);
+
+  const [mounted, setMounted] = useState(visible);
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(420)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+        Animated.timing(sheetTranslateY, { toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(sheetTranslateY, { toValue: 420, duration: 220, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      ]).start(() => setMounted(false));
+    }
+  }, [visible]);
+
+  if (!mounted) return null;
+
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+      <View style={dStyles.container}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
+          <Animated.View style={[qStyles.backdrop, { opacity: backdropOpacity }]} />
+        </Pressable>
+        <Animated.View style={[qStyles.sheet, { transform: [{ translateY: sheetTranslateY }] }]}>
+        <View style={qStyles.handle} />
+        <Text style={qStyles.title}>{alert?.label ?? 'Alert'}</Text>
+        <Text style={qStyles.sub}>
+          {alert ? `Score ${alert.preference.threshold}+ · ${nightsModeLabel(alert)} · ${alert.preference.timing === 'dayBefore' ? 'Notified the day before' : 'Notified at dusk'}` : ''}
+        </Text>
+
+        <ScrollView style={dStyles.scroll} showsVerticalScrollIndicator={false}>
+          {fires.length === 0 ? (
+            <Text style={dStyles.emptyText}>
+              Watching — no nights currently meet this threshold. You'll be notified as soon as one qualifies.
+            </Text>
+          ) : (
+            fires.map((f) => (
+              <View key={f.notificationId} style={dStyles.fireRow}>
+                <View style={dStyles.fireHeader}>
+                  <View style={[dStyles.fireDot, { backgroundColor: accent }]} />
+                  <Text style={dStyles.fireDate}>{formatFireDate(f.fireDateMs, use24h)}</Text>
+                </View>
+                <Text style={dStyles.fireTitle}>{f.title}</Text>
+                <Text style={dStyles.fireBody}>{f.body}</Text>
+              </View>
+            ))
+          )}
+        </ScrollView>
+
+        <TouchableOpacity style={[qStyles.doneBtn, { backgroundColor: accent }]} onPress={onClose} activeOpacity={0.85}>
+          <Text style={qStyles.doneBtnText}>Done</Text>
+        </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+const dStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  scroll: {
+    maxHeight: 280,
+    marginBottom: 20,
+  },
+  emptyText: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: 'rgba(255,255,255,0.5)',
+    paddingVertical: 8,
+  },
+  fireRow: {
+    paddingVertical: 12,
+    gap: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  fireHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  fireDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  fireDate: {
+    fontFamily: 'HankenGrotesk_500Medium',
+    fontSize: 11,
+    letterSpacing: 0.2,
+    color: 'rgba(255,255,255,0.5)',
+    textTransform: 'uppercase',
+  },
+  fireTitle: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  fireBody: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 12.5,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.55)',
+  },
+});
+
 const qStyles = StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -350,17 +513,53 @@ const qStyles = StyleSheet.create({
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const [tier, setTier] = useState<Tier>('premium');
   const [thresh, setThresh] = useState(78);
-  const [push, setPush] = useState(true);
   const [quietPickerVisible, setQuietPickerVisible] = useState(false);
+  const [detailsKey, setDetailsKey] = useState<string | null>(null);
   const { nightVision, setNightVision } = useNightVision();
-  const { use24h, setUse24h, useCelsius, setUseCelsius, useKnots, setUseKnots, quietStart, quietEnd, setQuietStart, setQuietEnd } = usePreferences();
-  const { alerts, toggleAlert, clearAlert } = useAlerts();
-  const { setStatus } = useSubscription();
+  const { use24h, setUse24h, useCelsius, setUseCelsius, useKnots, setUseKnots, quietStart, quietEnd, setQuietStart, setQuietEnd, pushEnabled, setPushEnabled } = usePreferences();
+  const { alerts, toggleAlert, clearAlert, clearAllAlerts } = useAlerts();
+  const { clearAllLocations } = useLocations();
+  const { status, trialDaysLeft, setStatus, setDevPreview } = useSubscription();
 
+  const tier: Tier = status === 'subscribed' ? 'premium' : status;
   const isPremium = tier === 'premium';
   const unlocked = tier !== 'free';
+
+  async function handleDeleteAccount() {
+    Alert.alert(
+      'Delete Account Data',
+      'This will permanently delete all your saved spots, alerts, and push notification settings from our servers. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { data } = await supabase.auth.getUser();
+              const userId = data?.user?.id;
+              if (userId) {
+                await supabase.from('locations').delete().eq('user_id', userId);
+                await supabase.from('push_tokens').delete().eq('user_id', userId);
+                await supabase.from('alerts').delete().eq('user_id', userId);
+              }
+              await AsyncStorage.clear();
+              await clearAllAlerts();
+              clearAllLocations();
+              setStatus('free');
+              // Let the state resets above commit their own render pass
+              // before the route change unmounts this screen — doing both
+              // in the same tick trips a React/Expo Router scheduling bug.
+              setTimeout(() => router.replace('/intro'), 0);
+            } catch {
+              Alert.alert('Error', 'Something went wrong. Please try again or contact info@strangeglyph.com.');
+            }
+          },
+        },
+      ],
+    );
+  }
   const ACCENT = nightVision ? NV_ACCENT : '#7ef0d2';
   const bgColors: [string, string] = nightVision ? ['#100200', '#1a0400'] : ['#070912', '#0a0e1a'];
   const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.12)';
@@ -400,7 +599,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 key={t}
                 style={[styles.devBtn, tier === t && { backgroundColor: 'rgba(126,240,210,0.2)', borderColor: ACCENT }]}
-                onPress={() => setTier(t)}
+                onPress={() => setDevPreview(t === 'premium' ? 'subscribed' : t)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.devBtnText, tier === t && { color: ACCENT }]}>{t}</Text>
@@ -418,23 +617,39 @@ export default function SettingsScreen() {
                 <ForecastMark size={24} accent={ACCENT} />
               </View>
               <View style={styles.premMain}>
-                <Text style={[styles.premTitle, { color: textPrimary }]}>ClearNight Premium</Text>
+                <Text style={[styles.premTitle, { color: textPrimary }]}>Clear<Text style={{ color: ACCENT }}>Night</Text> Premium</Text>
                 <Text style={[styles.premSub, { color: textDim }]}>All features unlocked · thank you</Text>
               </View>
               <CheckIcon size={18} color={ACCENT} strokeWidth={2.5} />
             </View>
-          ) : (
-            <TouchableOpacity style={[styles.upgradeCard, { borderColor: ACCENT, backgroundColor: nightVision ? 'rgba(224,120,48,0.10)' : 'rgba(126,240,210,0.08)' }]} activeOpacity={0.8}>
+          ) : tier === 'trial' ? (
+            <TouchableOpacity style={[styles.premCard, { borderColor: ACCENT, backgroundColor: cardBg }]} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
               <View style={[styles.premIcon, { borderColor: premIconBorder, backgroundColor: premIconBg }]}>
                 <ForecastMark size={24} accent={ACCENT} />
               </View>
               <View style={styles.premMain}>
-                <Text style={[styles.premTitle, { color: textPrimary }]}>ClearNight Premium</Text>
+                <View style={styles.premTitleRow}>
+                  <Text style={[styles.premTitle, { color: textPrimary }]}>Clear<Text style={{ color: ACCENT }}>Night</Text> Premium</Text>
+                  <View style={[styles.trialPill, { borderColor: ACCENT }]}>
+                    <Text style={[styles.trialPillText, { color: ACCENT }]}>TRIAL</Text>
+                  </View>
+                </View>
                 <Text style={[styles.premSub, { color: textDim }]}>
-                  {tier === 'trial'
-                    ? 'Trial active — keep alerts & the full week'
-                    : 'Unlock alerts, targets & the 7-night forecast'}
+                  {trialDaysLeft != null
+                    ? `${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left — then renews automatically`
+                    : 'Trial active — keep alerts & the full week'}
                 </Text>
+              </View>
+              <Text style={[styles.trialChevron, { color: textFaint }]}>›</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={[styles.upgradeCard, { borderColor: ACCENT, backgroundColor: nightVision ? 'rgba(224,120,48,0.10)' : 'rgba(126,240,210,0.08)' }]} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
+              <View style={[styles.premIcon, { borderColor: premIconBorder, backgroundColor: premIconBg }]}>
+                <ForecastMark size={24} accent={ACCENT} />
+              </View>
+              <View style={styles.premMain}>
+                <Text style={[styles.premTitle, { color: textPrimary }]}>Clear<Text style={{ color: ACCENT }}>Night</Text> Premium</Text>
+                <Text style={[styles.premSub, { color: textDim }]}>Unlock alerts, targets & the 7-night forecast</Text>
               </View>
               <View style={[styles.upgradeCta, { backgroundColor: ACCENT }]}>
                 <Text style={styles.upgradeCtaText}>Upgrade</Text>
@@ -453,7 +668,7 @@ export default function SettingsScreen() {
                 <Row
                   name="Push notifications"
                   sub="Get nudged on nights that qualify"
-                  right={<Toggle value={push} onToggle={() => setPush((p) => !p)} accent={ACCENT} />}
+                  right={<Toggle value={pushEnabled} onToggle={() => setPushEnabled(!pushEnabled)} accent={ACCENT} />}
                   divider={rowDivider}
                   nameColor={textPrimary} subColor={textDim}
                 />
@@ -478,7 +693,11 @@ export default function SettingsScreen() {
                         i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: rowDivider },
                       ]}
                     >
-                      <View style={styles.savedAlertLeft}>
+                      <TouchableOpacity
+                        style={styles.savedAlertLeft}
+                        activeOpacity={0.7}
+                        onPress={() => setDetailsKey(key)}
+                      >
                         <View style={[styles.savedAlertTypePill, rec.alertType === 'location' ? { backgroundColor: ACCENT + '22', borderColor: ACCENT } : { backgroundColor: 'rgba(143,208,255,0.12)', borderColor: '#8fd0ff' }]}>
                           <Text style={[styles.savedAlertTypeText, { color: rec.alertType === 'location' ? ACCENT : '#8fd0ff' }]}>
                             {rec.alertType === 'location' ? 'LOCATION' : 'TARGET'}
@@ -486,9 +705,11 @@ export default function SettingsScreen() {
                         </View>
                         <Text style={[styles.savedAlertName, { color: textPrimary }]} numberOfLines={1}>{rec.label}</Text>
                         <Text style={[styles.savedAlertMeta, { color: textDim }]}>
-                          {rec.fires.length} alert{rec.fires.length !== 1 ? 's' : ''} scheduled
+                          {rec.fires.length > 0
+                            ? `${rec.fires.length} alert${rec.fires.length !== 1 ? 's' : ''} scheduled  ›`
+                            : 'Watching — no qualifying nights yet  ›'}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                       <View style={styles.savedAlertRight}>
                         <Toggle value={rec.enabled} onToggle={() => toggleAlert(key)} accent={ACCENT} />
                         <TouchableOpacity onPress={() => clearAlert(key)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -520,7 +741,7 @@ export default function SettingsScreen() {
                     Get pushed when tonight — or a night this week — turns into a GO.
                   </Text>
                 </View>
-                <TouchableOpacity style={[styles.lockedCta, { backgroundColor: ACCENT }]} activeOpacity={0.8}>
+                <TouchableOpacity style={[styles.lockedCta, { backgroundColor: ACCENT }]} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
                   <Text style={styles.lockedCtaText}>Unlock</Text>
                 </TouchableOpacity>
               </View>
@@ -592,6 +813,13 @@ export default function SettingsScreen() {
               divider={rowDivider}
               nameColor={textPrimary}
             />
+            <Row
+              name="Delete Account Data"
+              right={<Text style={[styles.rowChev, { color: 'rgba(255,80,80,0.7)' }]}>›</Text>}
+              onPress={handleDeleteAccount}
+              divider={rowDivider}
+              nameColor="rgba(255,80,80,0.9)"
+            />
             {__DEV__ && (
               <Row
                 name="Reset onboarding"
@@ -628,6 +856,14 @@ export default function SettingsScreen() {
         onChangeStart={setQuietStart}
         onChangeEnd={setQuietEnd}
         onClose={() => setQuietPickerVisible(false)}
+      />
+
+      <AlertDetailsSheet
+        visible={detailsKey !== null}
+        alert={detailsKey ? alerts[detailsKey] ?? null : null}
+        accent={ACCENT}
+        use24h={use24h}
+        onClose={() => setDetailsKey(null)}
       />
     </LinearGradient>
   );
@@ -832,6 +1068,27 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#fff',
+  },
+  premTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trialPill: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  trialPillText: {
+    fontFamily: 'SpaceGrotesk_600SemiBold',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  trialChevron: {
+    fontFamily: 'HankenGrotesk_400Regular',
+    fontSize: 22,
   },
   premSub: {
     fontFamily: 'HankenGrotesk_400Regular',

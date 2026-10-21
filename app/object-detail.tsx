@@ -387,7 +387,11 @@ export default function ObjectDetailScreen() {
         >
           <Text style={[styles.alertBtnText, { color: isPro ? (alertSet ? accent : '#04130f') : 'rgba(255,255,255,0.55)' }]}>
             {isPro
-              ? alertSet ? `✓ ${alertCount} alert${alertCount === 1 ? '' : 's'} set` : 'Set alert'
+              ? alertSet
+                ? alertCount > 0
+                  ? `✓ ${alertCount} alert${alertCount === 1 ? '' : 's'} set`
+                  : '✓ Watching'
+                : 'Set alert'
               : '⭐ Upgrade for alerts'}
           </Text>
         </TouchableOpacity>

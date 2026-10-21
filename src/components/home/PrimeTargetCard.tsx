@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
@@ -196,7 +196,7 @@ interface Props {
 // been starred yet.
 export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Props) {
   const { nightVision } = useNightVision();
-  const { favorites } = useFavorites();
+  const { favorites, hydrated, addFavorite } = useFavorites();
   const { interests } = useInterests();
   const accent = nightVision ? NV_ACCENT : v.accent;
   const cardBorder = nightVision ? NV_BORDER : (day.verdict === 'poor' ? 'rgba(255,255,255,0.1)' : v.accentSoft);
@@ -232,13 +232,39 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
   const primeFavorited = favorites.has(`${locIndex}-prime-prime`);
 
   const coreIsUp = loc.prime.sub === 'Sagittarius · Galactic center';
-  const hasCategory = (cat: string) => loc.objects.some((o) => o.category === cat);
+  const objectsLoaded = loc.objects.length > 0 && loc.objects.some(o => o.category !== undefined);
+
+  const interestObjects = objectsLoaded ? loc.objects.filter((o) => {
+    if (!interests.deep && o.category === 'deep') return false;
+    if (!interests.planets && o.category === 'planets') return false;
+    if (!interests.meteors && o.category === 'meteors') return false;
+    return o.quality === 'Excellent' || o.quality === 'Good';
+  }) : [];
+
+  const shownCategories = new Set(interestObjects.map(o => o.category));
+  const showMilky = interests.milky && coreIsUp;
+  const hasInterests = interests.milky || interests.deep || interests.planets || interests.meteors;
+
+  // Auto-star interest-matched objects the first time (when favorites are empty after hydration).
+  // After that, the home page shows whatever is starred; user unstars to remove.
+  // With no interests picked at all, the card below falls back to showing the
+  // prime target — so it needs to be starred too, or it won't carry over to
+  // Tonight's Targets even though it's what's actually displayed here.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (favIndices.length > 0 || primeFavorited) return;
+    if (showMilky || !hasInterests) addFavorite(`${locIndex}-prime-prime`);
+    interestObjects.forEach((obj) => {
+      const idx = loc.objects.indexOf(obj);
+      addFavorite(`${locIndex}-object-${idx}`);
+    });
+  }, [hydrated, locIndex, objectsLoaded]);
 
   const emptyNotes: string[] = [];
   if (interests.milky && !coreIsUp) emptyNotes.push("Milky Way core isn't visible from here tonight.");
-  if (interests.deep && !hasCategory('deep')) emptyNotes.push('No deep-sky targets cleared the horizon tonight.');
-  if (interests.planets && !hasCategory('planets')) emptyNotes.push('No planets visible from here tonight.');
-  if (interests.meteors && !hasCategory('meteors')) emptyNotes.push('No active meteor showers in your area tonight.');
+  if (interests.deep && !shownCategories.has('deep')) emptyNotes.push('No deep-sky targets cleared the horizon tonight.');
+  if (interests.planets && !shownCategories.has('planets')) emptyNotes.push('No planets visible from here tonight.');
+  if (interests.meteors && !shownCategories.has('meteors')) emptyNotes.push('No active meteor showers in your area tonight.');
 
   const noteColor = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
   const EmptyNotes = emptyNotes.length > 0 ? (
@@ -251,17 +277,6 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
 
   // Nothing starred yet — show objects matching interests, or prime as fallback.
   if (favIndices.length === 0 && !primeFavorited) {
-    const objectsLoaded = loc.objects.length > 0 && loc.objects.some(o => o.category !== undefined);
-    const interestObjects = objectsLoaded ? loc.objects.filter((o) => {
-      if (interests.deep && o.category === 'deep') return true;
-      if (interests.planets && o.category === 'planets') return true;
-      if (interests.meteors && o.category === 'meteors') return true;
-      return false;
-    }).slice(0, 3) : [];
-
-    const showMilky = interests.milky && coreIsUp;
-    const hasInterests = interests.milky || interests.deep || interests.planets || interests.meteors;
-
     // Objects loaded but nothing matches interests — show empty notes only
     if (hasInterests && objectsLoaded && !showMilky && interestObjects.length === 0) {
       return (
@@ -337,6 +352,7 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
       )}
       {favIndices.map((objIndex) => {
         const obj = loc.objects[objIndex];
+        if (!obj) return null;
         const display = {
           name: obj.name,
           sub: `${obj.type} · ${obj.con}`,

@@ -4,11 +4,13 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
+import { useFavorites } from '../src/context/FavoritesContext';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 
 export default function ManageLocationsScreen() {
   const insets = useSafeAreaInsets();
   const { locations, removeLocation, setActiveLocIndex } = useLocations();
+  const { removeLocationFavorites } = useFavorites();
   const { nightVision } = useNightVision();
   const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
   const containerBg = nightVision ? '#150400' : '#080b12';
@@ -26,7 +28,7 @@ export default function ManageLocationsScreen() {
       `Remove ${name} from your spots?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => removeLocation(i) },
+        { text: 'Remove', style: 'destructive', onPress: () => { removeLocationFavorites(i); removeLocation(i); } },
       ],
     );
   }

@@ -26,6 +26,7 @@ import { haversineMiles, formatMiles } from '../src/services/geo';
 import { estimateBortle } from '../src/services/bortleEstimate';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { AppLogo } from '../src/components/common/AppLogo';
+import { AppWordmark } from '../src/components/common/AppWordmark';
 
 const ACCENT = '#7ef0d2';
 const ACCENT_SOFT = 'rgba(126,240,210,0.14)';
@@ -163,9 +164,7 @@ function StepWelcome({ onNext }: { onNext: () => void }) {
           <View style={styles.brand}>
             <AppLogo size={90} animate />
             <FadeInUp delay={500}>
-              <Text style={styles.brandWord}>
-                Clear<Text style={styles.brandWordFaded}>Night</Text>
-              </Text>
+              <AppWordmark height={36} />
             </FadeInUp>
           </View>
           <FadeInUp delay={750}>
@@ -366,7 +365,7 @@ function StepLocation({ onNext }: { onNext: () => void }) {
             ? <ActivityIndicator size="small" color="#1a2e28" />
             : <LocationArrow />
           }
-          <Text style={styles.primaryBtnText}>Use my current location</Text>
+          <Text style={styles.primaryBtnText}>Continue</Text>
         </TouchableOpacity>
 
         {/* Or divider */}
@@ -547,18 +546,6 @@ const styles = StyleSheet.create({
     gap: 2,
     marginBottom: 28,
   },
-  brandWord: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 30,
-    fontWeight: '600',
-    letterSpacing: -0.4,
-    color: '#fff',
-    lineHeight: 34,
-  },
-  brandWordFaded: {
-    opacity: 0.5,
-  },
-
   kicker: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 12,
@@ -775,7 +762,7 @@ const styles = StyleSheet.create({
     color: '#04130f',
     lineHeight: 13,
   },
-  prefEmoji: { fontSize: 24 },
+  prefEmoji: { fontSize: 24, color: '#fff' },
   prefName: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 15,

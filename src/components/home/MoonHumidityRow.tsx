@@ -4,6 +4,7 @@ import Svg, { Circle, ClipPath, Defs, Path, Rect } from 'react-native-svg';
 import { router } from 'expo-router';
 import { DayForecast } from '../../data/mockForecast';
 import { useNightVision, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM } from '../../context/NightVisionContext';
+import { usePreferences, applyTempFormat } from '../../context/PreferencesContext';
 
 // SVG moon that actually draws the correct phase shape based on illumination
 // and whether the moon is waxing or waning.
@@ -117,6 +118,7 @@ interface Props {
 
 export function MoonHumidityRow({ day, locIndex, dayIndex }: Props) {
   const { nightVision } = useNightVision();
+  const { useCelsius } = usePreferences();
   const cardBorder = nightVision ? NV_BORDER : 'rgba(255,255,255,0.12)';
   const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.06)';
   const textPrimary = nightVision ? NV_TEXT : '#fff';
@@ -149,7 +151,7 @@ export function MoonHumidityRow({ day, locIndex, dayIndex }: Props) {
         </View>
       </TouchableOpacity>
 
-      {/* Humidity + Rain card */}
+      {/* Humidity + Rain + Temp card */}
       <TouchableOpacity
         style={[styles.card, { borderColor: cardBorder, backgroundColor: cardBg }]}
         activeOpacity={0.7}
@@ -157,7 +159,9 @@ export function MoonHumidityRow({ day, locIndex, dayIndex }: Props) {
       >
         <DropIcon color={dropColor} humidity={day.humidity ?? 0} size={28} />
         <View style={styles.cardText}>
-          <Text style={[styles.cardLabel, { color: textPrimary }]}>{humidityLabel(day.humidity ?? 0, day.precipProb ?? 0)}</Text>
+          <Text style={[styles.cardLabel, { color: textPrimary }]}>
+            {applyTempFormat(day.tempF, useCelsius)} · {humidityLabel(day.humidity ?? 0, day.precipProb ?? 0)}
+          </Text>
           <Text style={[styles.cardSub, { color: textDim }]}>
             {day.humidity != null ? `${day.humidity}% humid` : '—'}
             {(day.precipProb ?? 0) > 0 && ` · ${day.precipProb}% rain`}

@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppLogo } from '../src/components/common/AppLogo';
+import { AppWordmark } from '../src/components/common/AppWordmark';
 
 const ACCENT = '#7ef0d2';
 
@@ -29,7 +30,7 @@ export default function AboutScreen() {
           <View style={styles.heroIcon}>
             <AppLogo size={56} animate={false} />
           </View>
-          <Text style={styles.heroName}>ClearNight</Text>
+          <AppWordmark height={32} />
           <Text style={styles.heroVersion}>Version 1.0.0</Text>
         </View>
 
@@ -126,13 +127,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
-  },
-  heroName: {
-    fontFamily: 'SpaceGrotesk_600SemiBold',
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#fff',
-    letterSpacing: -0.3,
   },
   heroVersion: {
     fontFamily: 'HankenGrotesk_400Regular',

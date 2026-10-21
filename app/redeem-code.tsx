@@ -32,8 +32,8 @@ export default function RedeemCodeScreen() {
   async function handleRedeem() {
     setLoading(true);
     try {
-      // Opens the native App Store offer code redemption sheet (iOS 14+)
-      const url = 'https://apps.apple.com/redeem';
+      // Scoped to this app's offer codes so users land straight on code entry
+      const url = 'https://apps.apple.com/redeem?ctx=offercodes&id=6788958981';
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);

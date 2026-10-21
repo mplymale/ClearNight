@@ -1,6 +1,6 @@
 import { DayForecast, NightWindow, PrimeTarget, SkyObject } from '../data/mockForecast';
 import { verdictFromScore } from '../constants/verdicts';
-import { fetchCloudCover, cloudAt, humidityAt, windAt, CloudSeries } from './openMeteo';
+import { fetchCloudCover, cloudAt, humidityAt, windAt, tempAt, CloudSeries } from './openMeteo';
 import { fetchSeeing, seeingAt, SeeingSeries } from './sevenTimer';
 import { getNightBounds, getMoonIlluminationPct, getMoonPhaseName } from './moon';
 import { computeScore, findBestWindow, HourPoint } from './scoreEngine';
@@ -53,7 +53,7 @@ export async function buildRealForecast(lat: number, lon: number, bortle: number
     for (let t = bounds.duskUtcMs; t <= bounds.dawnUtcMs; t += 3600 * 1000) {
       const cloudPct = cloudAt(cloud, t);
       const score = computeScore(cloudPct, moonPct, seeingApp, bortle);
-      hourPoints.push({ utcMs: t, cloudPct, score, humidity: humidityAt(cloud, t), wind: windAt(cloud, t) });
+      hourPoints.push({ utcMs: t, cloudPct, score, humidity: humidityAt(cloud, t), wind: windAt(cloud, t), temp: tempAt(cloud, t) });
     }
 
     const avgCloud = hourPoints.length
@@ -65,6 +65,11 @@ export async function buildRealForecast(lat: number, lon: number, bortle: number
     const avgWindKmh = hourPoints.length
       ? Math.round(hourPoints.reduce((s, h) => s + (h.wind ?? 0), 0) / hourPoints.length)
       : 0;
+    const avgTempF = hourPoints.length
+      ? Math.round(hourPoints.reduce((s, h) => s + (h.temp ?? 50), 0) / hourPoints.length)
+      : 50;
+    const tempHighF = Math.round(cloud.tempHighByDay[i] ?? avgTempF);
+    const tempLowF = Math.round(cloud.tempLowByDay[i] ?? avgTempF);
     const dayScore = computeScore(avgCloud, moonPct, seeingApp, bortle);
 
     const best = findBestWindow(hourPoints, bounds.astroNightStartUtcMs, bounds.astroNightEndUtcMs);
@@ -103,6 +108,9 @@ export async function buildRealForecast(lat: number, lon: number, bortle: number
       humidity: avgHumidity,
       precipProb: cloud.precipProbByDay[i] ?? 0,
       windKmh: avgWindKmh,
+      tempF: avgTempF,
+      tempHighF,
+      tempLowF,
       moon: moonPct,
       seeingN: seeingApp,
       bortle,

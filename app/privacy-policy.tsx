@@ -33,14 +33,14 @@ export default function PrivacyPolicyScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        <Text style={styles.updated}>Last updated: June 2026</Text>
+        <Text style={styles.updated}>Last updated: July 15, 2026</Text>
 
         <Section title="Overview">
           ClearNight ("we", "our", or "us") is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your choices regarding your data.
         </Section>
 
         <Section title="Information We Collect">
-          {"Location data: We request access to your device's location to generate sky forecasts for your area. Location is used only locally on your device and is not transmitted to our servers.\n\nUsage data: We may collect anonymous, aggregated usage statistics to improve the app. This data cannot be used to identify you personally.\n\nPurchase data: If you subscribe to ClearNight Premium, Apple handles all payment processing. We do not store your payment information."}
+          {"Location data: We request access to your device's location to generate sky forecasts for your area. When you save a spot, its coordinates are stored on our servers (via Supabase), tied to an anonymous account — no name, email, or other personal information is required.\n\nPurchase data: If you subscribe to ClearNight Premium, Apple handles all payment processing. We receive your subscription status (via RevenueCat) to unlock premium features, but never your payment details."}
         </Section>
 
         <Section title="How We Use Your Information">

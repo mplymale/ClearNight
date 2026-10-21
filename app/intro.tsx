@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppLogo } from '../src/components/common/AppLogo';
+import { AppWordmark } from '../src/components/common/AppWordmark';
 import { useLocations } from '../src/context/LocationsContext';
 
 const LAUNCH_COUNT_KEY = 'clearnight:launchCount';
@@ -41,10 +42,10 @@ export default function IntroScreen() {
       .then((raw) => {
         const count = raw ? Number(raw) : 0;
         AsyncStorage.setItem(LAUNCH_COUNT_KEY, String(count + 1)).catch(() => {});
-        setDestination(count === 0 || locations.length === 0 ? '/onboarding' : '/(tabs)');
+        setDestination(count === 0 ? '/onboarding' : '/(tabs)');
       })
       .catch(() => {
-        setDestination(locations.length > 0 ? '/(tabs)' : '/onboarding');
+        setDestination('/(tabs)');
       });
   }, [hydrated]);
 
@@ -59,9 +60,9 @@ export default function IntroScreen() {
       <LinearGradient colors={['#04060e', '#060d1a', '#081422']} style={StyleSheet.absoluteFill} />
       <View style={styles.center}>
         <AppLogo size={240} animate />
-        <Animated.Text style={[styles.wordmark, { opacity: wordOpacity }]}>
-          ClearNight
-        </Animated.Text>
+        <Animated.View style={{ opacity: wordOpacity }}>
+          <AppWordmark height={40} />
+        </Animated.View>
       </View>
     </Animated.View>
   );
@@ -77,11 +78,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 28,
-  },
-  wordmark: {
-    fontFamily: 'Sora_600SemiBold',
-    fontSize: 34,
-    letterSpacing: -0.5,
-    color: '#fff',
   },
 });

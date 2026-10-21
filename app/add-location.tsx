@@ -76,8 +76,8 @@ function searchDarkSkyPlaces(q: string): SearchResult[] {
 
 export default function AddLocationScreen() {
   const insets = useSafeAreaInsets();
-  const { addLocation, locations, activeLocIndex } = useLocations();
-  const { addFavorite } = useFavorites();
+  const { addLocation, removeLocation, locations, activeLocIndex } = useLocations();
+  const { addFavorite, removeLocationFavorites } = useFavorites();
   const { status } = useSubscription();
   const { nightVision } = useNightVision();
   const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
@@ -89,6 +89,16 @@ export default function AddLocationScreen() {
   const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.38)';
   const isFree = status === 'free';
   const hasLocation = locations.length > 0;
+
+  // Free tier only ever keeps one spot — clear any existing ones (there can
+  // be more than one left over from a premium period) before adding the
+  // replacement.
+  function clearAllLocations() {
+    for (let i = locations.length - 1; i >= 0; i--) {
+      removeLocationFavorites(i);
+      removeLocation(i);
+    }
+  }
   const [query, setQuery] = useState('');
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsDenied, setGpsDenied] = useState(false);
@@ -221,7 +231,8 @@ export default function AddLocationScreen() {
       const estimatedBortle = estimateBortle(pos.coords.latitude, pos.coords.longitude);
 
       const loc = mkLocFromPlace(city, region, estimatedBortle, pos.coords.latitude, pos.coords.longitude);
-      const newIdx = locations.length;
+      if (isFree && hasLocation) clearAllLocations();
+      const newIdx = isFree && hasLocation ? 0 : locations.length;
       addLocation(loc);
       addFavorite(`${newIdx}-prime-prime`);
       router.back();
@@ -238,8 +249,9 @@ export default function AddLocationScreen() {
       Alert.alert('Already added', `${place.name} is already in your spots.`);
       return;
     }
+    if (isFree && hasLocation) clearAllLocations();
     const loc = mkLocFromPlace(place.name, place.state, place.bortle, place.lat, place.lon);
-    const newIdx = locations.length;
+    const newIdx = isFree && hasLocation ? 0 : locations.length;
     addLocation(loc);
     addFavorite(`${newIdx}-prime-prime`);
     router.back();
@@ -251,8 +263,9 @@ export default function AddLocationScreen() {
       Alert.alert('Already added', `${r.city} is already in your spots.`);
       return;
     }
+    if (isFree && hasLocation) clearAllLocations();
     const loc = mkLocFromPlace(r.city, r.region, estimateBortle(r.latitude, r.longitude), r.latitude, r.longitude);
-    const newIdx = locations.length;
+    const newIdx = isFree && hasLocation ? 0 : locations.length;
     addLocation(loc);
     addFavorite(`${newIdx}-prime-prime`);
     router.back();
@@ -305,7 +318,7 @@ export default function AddLocationScreen() {
         ) : (
           <TouchableOpacity
             style={[styles.gpsRow, { backgroundColor: cardBg, borderColor: cardBorder }]}
-            onPress={isFree && hasLocation ? () => router.push('/paywall') : handleUseLocation}
+            onPress={handleUseLocation}
             activeOpacity={0.8}
             disabled={gpsLoading}
           >
@@ -316,7 +329,7 @@ export default function AddLocationScreen() {
               }
             </View>
             <View style={styles.gpsMain}>
-              <Text style={[styles.gpsTitle, { color: textPrimary }]}>Use my current location</Text>
+              <Text style={[styles.gpsTitle, { color: textPrimary }]}>Current location</Text>
               <Text style={[styles.gpsSub, { color: textDim }]}>GPS · most accurate</Text>
             </View>
             {!gpsLoading && <Text style={[styles.gpsChev, { color: nvAccent }]}>›</Text>}
@@ -347,7 +360,7 @@ export default function AddLocationScreen() {
                       key={r.key}
                       style={[styles.placeRow, { backgroundColor: cardBg, borderColor: cardBorder }, added && { borderColor: `${nvAccent}40`, backgroundColor: nightVision ? 'rgba(224,120,48,0.05)' : 'rgba(126,240,210,0.05)' }]}
                       activeOpacity={0.8}
-                      onPress={() => isFree && hasLocation ? router.push('/paywall') : handleSearchResult(r)}
+                      onPress={() => handleSearchResult(r)}
                     >
                       <View style={[styles.moonIcon, nightVision && { backgroundColor: 'rgba(224,120,48,0.07)' }]}>
                         <MoonIcon color={nvAccent} />
@@ -389,7 +402,7 @@ export default function AddLocationScreen() {
                     key={i}
                     style={[styles.placeRow, { backgroundColor: cardBg, borderColor: cardBorder }, added && { borderColor: `${nvAccent}40`, backgroundColor: nightVision ? 'rgba(224,120,48,0.05)' : 'rgba(126,240,210,0.05)' }]}
                     activeOpacity={0.8}
-                    onPress={() => isFree && hasLocation ? router.push('/paywall') : handleAddPlace(place)}
+                    onPress={() => handleAddPlace(place)}
                   >
                     <View style={[styles.moonIcon, nightVision && { backgroundColor: 'rgba(224,120,48,0.07)' }]}>
                       <MoonIcon color={nvAccent} />

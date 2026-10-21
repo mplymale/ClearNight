@@ -20,9 +20,24 @@ import { InterestsProvider } from '../src/context/InterestsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { PreferencesProvider } from '../src/context/PreferencesContext';
 import { AuthProvider } from '../src/context/AuthContext';
+import { useNotificationRouting } from '../src/services/notificationRouting';
+import { useSiriRouting } from '../src/services/siriRouting';
 
 SplashScreen.preventAutoHideAsync();
 
+// Rendered inside the provider tree so it can read/set the active location
+// via context — routes a tapped alert notification to the right screen.
+function NotificationRouter() {
+  useNotificationRouting();
+  return null;
+}
+
+// Same idea, for a "this week"/"this weekend" Siri query — jumps to
+// whichever saved spot was asked about once the app comes to the foreground.
+function SiriRouter() {
+  useSiriRouting();
+  return null;
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -43,12 +58,14 @@ export default function RootLayout() {
     <AuthProvider>
     <NightVisionProvider>
       <LocationsProvider>
+      <PreferencesProvider>
       <PlanProvider>
       <AlertsProvider>
       <FavoritesProvider>
       <InterestsProvider>
       <SubscriptionProvider>
-      <PreferencesProvider>
+        <NotificationRouter />
+        <SiriRouter />
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
           <Stack.Screen name="intro" options={{ animation: 'fade', gestureEnabled: false, contentStyle: { backgroundColor: '#04060e' } }} />
@@ -61,18 +78,18 @@ export default function RootLayout() {
           <Stack.Screen name="manage-locations" />
           <Stack.Screen name="add-location" options={{ presentation: 'modal' }} />
           <Stack.Screen name="set-alert" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="paywall" />
           <Stack.Screen name="about" />
           <Stack.Screen name="privacy-policy" />
           <Stack.Screen name="terms" />
           <Stack.Screen name="redeem-code" />
         </Stack>
-      </PreferencesProvider>
       </SubscriptionProvider>
       </InterestsProvider>
       </FavoritesProvider>
       </AlertsProvider>
       </PlanProvider>
+      </PreferencesProvider>
       </LocationsProvider>
     </NightVisionProvider>
     </AuthProvider>

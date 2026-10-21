@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { registerPushToken } from '../services/pushTokens';
 
 type AuthContextType = {
   user: User | null;
@@ -25,7 +24,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setLoading(false);
-      if (session) registerPushToken().catch(() => {});
     });
 
     return () => subscription.unsubscribe();

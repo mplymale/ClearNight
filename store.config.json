@@ -1,0 +1,76 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0",
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "en-US": {
+        "title": "ClearNight",
+        "subtitle": "Know when the sky is worth it",
+        "description": "ClearNight gives you a single clarity score for tonight's sky \u2014 based on cloud cover, moon phase, seeing, and light pollution \u2014 so you always know before you go.\n\nSave your favorite dark-sky spots and get a one-glance verdict for each: GO, borderline, or not tonight. Premium unlocks the full 7-night forecast, unlimited saved spots, hour-by-hour clarity, prime-target timing for what's actually visible, and GO alerts that fire the moment a saved spot's sky clears.\n\nClearNight doesn't guess. It scores.\n\nTerms of Use: https://clearnightapp.com/terms",
+        "keywords": [
+          "stargazing",
+          "astronomy",
+          "dark sky",
+          "night sky",
+          "light pollution",
+          "clear sky",
+          "moon phase",
+          "seeing",
+          "astrophotography"
+        ],
+        "promoText": "Free for 7 days. Then never guess again.",
+        "releaseNotes": "Initial release.",
+        "marketingUrl": "https://clearnightapp.com",
+        "privacyPolicyUrl": "https://clearnightapp.com/privacy",
+        "supportUrl": "https://clearnightapp.com/support",
+        "screenshots": {
+          "APP_IPHONE_67": [
+            "./Appstore_screenshots/framed/01_home.png",
+            "./Appstore_screenshots/framed/02_locations_home.png",
+            "./Appstore_screenshots/framed/03_target.png",
+            "./Appstore_screenshots/framed/04_conditions.png",
+            "./Appstore_screenshots/framed/05_alert.png",
+            "./Appstore_screenshots/framed/06_spots.png"
+          ]
+        }
+      }
+    },
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": false,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "copyright": "2026 Strange Glyph, LLC",
+    "categories": [
+      "WEATHER",
+      "LIFESTYLE"
+    ]
+  }
+}

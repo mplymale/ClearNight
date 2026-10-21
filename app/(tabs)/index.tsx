@@ -3,6 +3,7 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,7 +31,6 @@ import { SkyBackground } from '../../src/components/home/SkyBackground';
 import { StarField } from '../../src/components/home/StarField';
 import { useSubscription, SubscriptionStatus } from '../../src/context/SubscriptionContext';
 import { useAlerts } from '../../src/context/AlertsContext';
-import { usePreferences } from '../../src/context/PreferencesContext';
 
 // ── Shared icons ─────────────────────────────────────────────────────────────
 
@@ -163,10 +163,10 @@ function TopSection(p: TopSectionProps) {
 
         <View style={styles.locCenter}>
           {p.isFree ? (
-            <View style={styles.freeLocNameRow}>
+            <TouchableOpacity style={styles.freeLocNameRow} onPress={p.onAddSpot} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={[styles.locName, { color: textPrimary }]}>{p.locName}</Text>
               <LockIcon color={nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.55)'} />
-            </View>
+            </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={p.onManage} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={[styles.locName, { color: textPrimary }]} numberOfLines={1}>{p.locName}</Text>
@@ -229,9 +229,18 @@ function TopSection(p: TopSectionProps) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { nightVision } = useNightVision();
-  const { status } = useSubscription();
+  const { status, hasActivePurchase } = useSubscription();
   const { plan } = usePlan();
-  const { locations, activeLocIndex, hydrated, refreshingNames, fetchErrorNames, clearFetchError } = useLocations();
+  const { locations, activeLocIndex, hydrated, refreshingNames, fetchErrorNames, clearFetchError, refreshAll } = useLocations();
+  const [pullRefreshing, setPullRefreshing] = useState(false);
+  const onPullToRefresh = async () => {
+    setPullRefreshing(true);
+    try {
+      await refreshAll();
+    } finally {
+      setPullRefreshing(false);
+    }
+  };
   const [locIndex, setLocIndex] = useState(0);
   const [dayIndex, setDayIndex] = useState(0);
   // Sync when user picks a location from manage-locations
@@ -240,16 +249,12 @@ export default function HomeScreen() {
     setDayIndex(0);
   }, [activeLocIndex]);
 
-  const { hasAlert, evaluateAndSchedule } = useAlerts();
-  const { quietStart, quietEnd } = usePreferences();
+  // Alert scheduling itself is handled by AlertsProvider, which reacts to
+  // locations/alerts/quiet-hours changes from the provider root — that way
+  // it keeps running even when this screen is backgrounded (and frozen) by
+  // another screen, e.g. the Settings alerts list sitting on top.
+  const { hasAlert } = useAlerts();
   const isFree = status === 'free';
-
-  // Re-evaluate alert schedules whenever forecast data refreshes
-  useEffect(() => {
-    if (locations.length > 0) {
-      evaluateAndSchedule(locations, quietStart, quietEnd);
-    }
-  }, [locations]);
   const nvTextPrimary = nightVision ? NV_TEXT : '#fff';
   const nvTextDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.72)';
 
@@ -283,32 +288,33 @@ export default function HomeScreen() {
 
   const arcSwiper = useRef(
     PanResponder.create({
+      // Claim the gesture as soon as there's clear horizontal intent
       onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+        Math.abs(gs.dx) > 6 && Math.abs(gs.dx) > Math.abs(gs.dy),
+      onMoveShouldSetPanResponderCapture: (_, gs) =>
+        Math.abs(gs.dx) > 12 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.2,
       onPanResponderMove: (_, gs) => {
-        // Resist slightly at edges
         const atStart = locIndexRef.current === 0 && gs.dx > 0;
         const atEnd = locIndexRef.current === locationsRef.current.length - 1 && gs.dx < 0;
-        swipeX.setValue(atStart || atEnd ? gs.dx * 0.25 : gs.dx);
+        swipeX.setValue(atStart || atEnd ? gs.dx * 0.2 : gs.dx);
       },
       onPanResponderRelease: (_, gs) => {
         const atStart = locIndexRef.current === 0;
         const atEnd = locIndexRef.current === locationsRef.current.length - 1;
-        const wantsNext = gs.dx < -50;
-        const wantsPrev = gs.dx > 50;
+        // Trigger on distance OR fast flick velocity
+        const wantsNext = gs.dx < -40 || gs.vx < -0.4;
+        const wantsPrev = gs.dx > 40 || gs.vx > 0.4;
 
         if (wantsNext && !atEnd) {
           goLoc(1);
         } else if (wantsPrev && !atStart) {
           goLoc(-1);
         } else {
-          // No more locations in that direction (or didn't pass the
-          // threshold) — always snap back so the arc never gets stuck.
-          Animated.spring(swipeX, { toValue: 0, useNativeDriver: true, tension: 120, friction: 14 }).start();
+          Animated.spring(swipeX, { toValue: 0, useNativeDriver: true, tension: 150, friction: 20 }).start();
         }
       },
       onPanResponderTerminate: () => {
-        Animated.spring(swipeX, { toValue: 0, useNativeDriver: true, tension: 120, friction: 14 }).start();
+        Animated.spring(swipeX, { toValue: 0, useNativeDriver: true, tension: 150, friction: 20 }).start();
       },
     })
   ).current;
@@ -351,7 +357,13 @@ export default function HomeScreen() {
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top }]}
         showsVerticalScrollIndicator={false}
-        bounces={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={onPullToRefresh}
+            tintColor={nightVision ? NV_ACCENT : '#7ef0d2'}
+          />
+        }
       >
         {/* Top section: brand + location row */}
         <TopSection
@@ -399,9 +411,10 @@ export default function HomeScreen() {
                   style={styles.locationBellRow}
                   onPress={() => router.push({ pathname: '/set-alert', params: { locIndex: String(safeLocIndex), type: 'location' } })}
                   activeOpacity={0.7}
+                  hitSlop={{ top: 10, bottom: 10, left: 20, right: 20 }}
                 >
-                  <BellIcon active={locAlert} color={locAlert ? nvAccent : 'rgba(255,255,255,0.4)'} />
-                  <Text style={[styles.locationBellText, { color: locAlert ? nvAccent : 'rgba(255,255,255,0.4)' }]}>
+                  <BellIcon active={locAlert} color={nvAccent} />
+                  <Text style={[styles.locationBellText, { color: nvAccent }]}>
                     {locAlert ? 'Alert set for this location' : 'Set an alert for this location'}
                   </Text>
                 </TouchableOpacity>
@@ -411,7 +424,7 @@ export default function HomeScreen() {
         )}
 
         {/* Trial banner — only while actually on trial, not once subscribed */}
-        {status === 'trial' && (
+        {status === 'trial' && !hasActivePurchase && (
           <View style={styles.trialBanner}>
             <View style={[styles.trialDot, { backgroundColor: verdict.accent }]} />
             <Text style={[styles.trialText, { color: nvTextDim }]}>
@@ -429,7 +442,7 @@ export default function HomeScreen() {
           style={{ transform: [{ translateX: swipeX }] }}
           {...(isFree ? {} : arcSwiper.panHandlers)}
         >
-          <NightArc loc={loc} day={day} verdict={verdict} freeMode={isFree} />
+          <NightArc loc={loc} day={day} verdict={verdict} />
 
             {/* Factor chips — premium only (day-by-day breakdown) */}
           {!isFree && (
@@ -683,7 +696,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
-    paddingTop: 10,
+    paddingVertical: 10,
     paddingHorizontal: 4,
   },
   locationBellText: {

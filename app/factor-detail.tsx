@@ -1,5 +1,5 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useRef } from 'react';
+import { Animated, Dimensions, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { VERDICTS } from '../src/constants/verdicts';
 import { useLocations } from '../src/context/LocationsContext';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
-import { usePreferences, applyWindFormat, windLabel } from '../src/context/PreferencesContext';
+import { usePreferences, applyWindFormat, windLabel, applyTempFormat } from '../src/context/PreferencesContext';
 import type { Location, DayForecast } from '../src/data/mockForecast';
 
 
@@ -184,6 +184,7 @@ function getContent(
   day: DayForecast,
   accent: string,
   useKnots: boolean,
+  useCelsius: boolean,
 ) {
   switch (factor) {
     case 'cloud': return {
@@ -296,6 +297,9 @@ function getContent(
         valueLine: (
           <Text style={[styles.headerValue, { color: accent }]}>
             {h}%{p > 0 ? ` · ${p}% rain` : ''}
+            <Text style={styles.headerValueSub}>
+              {' '}· {applyTempFormat(day.tempLowF, useCelsius)} – {applyTempFormat(day.tempHighF, useCelsius)}
+            </Text>
           </Text>
         ),
         description: h < 40
@@ -325,6 +329,8 @@ function getContent(
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
+const SCREEN_H = Dimensions.get('window').height;
+
 export default function FactorDetailScreen() {
   const insets = useSafeAreaInsets();
   const { factor, locIndex, dayIndex } = useLocalSearchParams<{
@@ -335,7 +341,7 @@ export default function FactorDetailScreen() {
 
   const { locations } = useLocations();
   const { nightVision } = useNightVision();
-  const { useKnots } = usePreferences();
+  const { useKnots, useCelsius } = usePreferences();
   const loc = locations[Number(locIndex ?? 0)];
   const selectedDayIndex = Number(dayIndex ?? 0);
   const tonight = loc.days[0]; // header/description always show tonight
@@ -346,7 +352,35 @@ export default function FactorDetailScreen() {
   const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
   const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.35)';
 
-  const { title, valueLine, description, getValue, getQuality, caption, tickLabels } = getContent(factor, loc, tonight, accent, useKnots) as ReturnType<typeof getContent> & { tickLabels?: [string, string, string] };
+  const { title, valueLine, description, getValue, getQuality, caption, tickLabels } = getContent(factor, loc, tonight, accent, useKnots, useCelsius) as ReturnType<typeof getContent> & { tickLabels?: [string, string, string] };
+
+  // Drag-down-to-dismiss — mirrors the gesture on the home screen's BottomSheet.
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const dismiss = () => {
+    Animated.timing(translateY, { toValue: SCREEN_H, duration: 200, useNativeDriver: true }).start(() => router.back());
+  };
+
+  const snapBack = () => {
+    Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 60, friction: 12 }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 5 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) translateY.setValue(g.dy);
+      },
+      onPanResponderRelease: (_, g) => {
+        const DISMISS_DY = 100;
+        const FLICK_VELOCITY = 0.5;
+        if (g.dy > DISMISS_DY || g.vy > FLICK_VELOCITY) dismiss();
+        else snapBack();
+      },
+      onPanResponderTerminate: snapBack,
+    })
+  ).current;
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -356,9 +390,11 @@ export default function FactorDetailScreen() {
       </TouchableOpacity>
 
       {/* Sheet anchored to bottom */}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 24, backgroundColor: sheetBg }]}>
-        {/* Handle */}
-        <View style={[styles.handle, { backgroundColor: handleBg }]} />
+      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + 24, backgroundColor: sheetBg, transform: [{ translateY }] }]}>
+        {/* Grab zone — padded for an easy touch target, drives the drag-to-dismiss */}
+        <View style={styles.dragZone} {...panResponder.panHandlers}>
+          <View style={[styles.handle, { backgroundColor: handleBg }]} />
+        </View>
 
         {/* Header row */}
         <View style={styles.header}>
@@ -377,7 +413,7 @@ export default function FactorDetailScreen() {
         ) : (
           <NightBars days={loc.days} getValue={getValue} getQuality={getQuality} selectedIndex={selectedDayIndex} caption={caption} tickLabels={tickLabels} />
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -401,13 +437,16 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
 
+  dragZone: {
+    paddingTop: 4,
+    paddingBottom: 18,
+    alignItems: 'center',
+  },
   handle: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.22)',
-    alignSelf: 'center',
-    marginBottom: 22,
   },
 
   header: {

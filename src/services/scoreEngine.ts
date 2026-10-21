@@ -8,6 +8,7 @@ export interface HourPoint {
   score: number; // 0-100
   humidity?: number;
   wind?: number;
+  temp?: number;
 }
 
 const WEIGHTS = {

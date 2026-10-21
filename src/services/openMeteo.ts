@@ -6,11 +6,14 @@ export interface CloudPoint {
   cloudPct: number; // 0-100
   humidity: number; // 0-100 relative humidity %
   windKmh: number;  // wind speed in km/h (converted to mph/kts at display time)
+  tempF: number;    // temperature in Fahrenheit
 }
 
 export interface CloudSeries {
   points: CloudPoint[];
   precipProbByDay: number[]; // daily max precipitation probability 0-100, index 0 = today
+  tempHighByDay: number[];   // daily high, Fahrenheit, index 0 = today
+  tempLowByDay: number[];    // daily low, Fahrenheit, index 0 = today
   utcOffsetSeconds: number;
   timezone: string;
 }
@@ -19,7 +22,9 @@ export async function fetchCloudCover(lat: number, lon: number): Promise<CloudSe
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
-    `&hourly=cloudcover,relative_humidity_2m,windspeed_10m&daily=precipitation_probability_max&timezone=auto&forecast_days=7`;
+    `&hourly=cloudcover,relative_humidity_2m,windspeed_10m,temperature_2m` +
+    `&daily=precipitation_probability_max,temperature_2m_max,temperature_2m_min` +
+    `&temperature_unit=fahrenheit&timezone=auto&forecast_days=7`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Open-Meteo request failed: ${res.status}`);
@@ -31,20 +36,24 @@ export async function fetchCloudCover(lat: number, lon: number): Promise<CloudSe
   const clouds: number[] = json.hourly?.cloudcover ?? [];
   const humidities: number[] = json.hourly?.relative_humidity_2m ?? [];
   const winds: number[] = json.hourly?.windspeed_10m ?? [];
+  const temps: number[] = json.hourly?.temperature_2m ?? [];
   const precipProbByDay: number[] = json.daily?.precipitation_probability_max ?? [];
+  const tempHighByDay: number[] = json.daily?.temperature_2m_max ?? [];
+  const tempLowByDay: number[] = json.daily?.temperature_2m_min ?? [];
 
   const points: CloudPoint[] = times.map((t, i) => ({
     utcMs: Date.parse(`${t}:00Z`) - utcOffsetSeconds * 1000,
     cloudPct: clouds[i] ?? 0,
     humidity: humidities[i] ?? 0,
     windKmh: winds[i] ?? 0,
+    tempF: temps[i] ?? 50,
   }));
 
-  return { points, precipProbByDay, utcOffsetSeconds, timezone };
+  return { points, precipProbByDay, tempHighByDay, tempLowByDay, utcOffsetSeconds, timezone };
 }
 
 function nearest(series: CloudSeries, utcMs: number): CloudPoint {
-  if (series.points.length === 0) return { utcMs, cloudPct: 50, humidity: 60, windKmh: 0 };
+  if (series.points.length === 0) return { utcMs, cloudPct: 50, humidity: 60, windKmh: 0, tempF: 50 };
   let best = series.points[0];
   let bestDiff = Math.abs(best.utcMs - utcMs);
   for (const p of series.points) {
@@ -67,4 +76,9 @@ export function humidityAt(series: CloudSeries, utcMs: number): number {
 // Nearest wind speed (km/h) to a given absolute UTC instant
 export function windAt(series: CloudSeries, utcMs: number): number {
   return nearest(series, utcMs).windKmh;
+}
+
+// Nearest temperature (Fahrenheit) to a given absolute UTC instant
+export function tempAt(series: CloudSeries, utcMs: number): number {
+  return nearest(series, utcMs).tempF;
 }

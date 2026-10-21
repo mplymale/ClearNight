@@ -84,17 +84,25 @@ if (Platform.OS === 'android') {
   });
 }
 
+// Carried in the notification's data payload so tapping it can route to the
+// right place (a location's home screen, or a target's detail page) instead
+// of just opening the app to wherever it last was.
+export type AlertNavData =
+  | { kind: 'location'; locationName: string }
+  | { kind: 'target'; locationName: string; targetType: 'prime' | 'object'; objIndex?: number };
+
 interface ScheduleParams {
   title: string;
   body: string;
   fireDate: Date;
   quietStart?: number;
   quietEnd?: number;
+  navData?: AlertNavData;
 }
 
 // Returns the scheduled notification id, or null if the fire time has
 // already passed or falls inside quiet hours.
-export async function scheduleLocalAlert({ title, body, fireDate, quietStart, quietEnd }: ScheduleParams): Promise<string | null> {
+export async function scheduleLocalAlert({ title, body, fireDate, quietStart, quietEnd, navData }: ScheduleParams): Promise<string | null> {
   if (fireDate.getTime() <= Date.now()) return null;
 
   if (quietStart !== undefined && quietEnd !== undefined) {
@@ -103,7 +111,7 @@ export async function scheduleLocalAlert({ title, body, fireDate, quietStart, qu
   }
 
   const id = await Notifications.scheduleNotificationAsync({
-    content: { title, body, sound: true },
+    content: { title, body, sound: true, data: navData ?? {} },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireDate },
   });
   return id;

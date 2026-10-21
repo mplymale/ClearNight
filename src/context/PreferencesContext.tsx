@@ -9,6 +9,7 @@ interface Preferences {
   useKnots: boolean;
   quietStart: number; // hour 0-23, e.g. 23 = 11pm
   quietEnd: number;   // hour 0-23, e.g. 7 = 7am
+  pushEnabled: boolean;
 }
 
 interface PreferencesCtx extends Preferences {
@@ -17,6 +18,7 @@ interface PreferencesCtx extends Preferences {
   setUseKnots: (v: boolean) => void;
   setQuietStart: (h: number) => void;
   setQuietEnd: (h: number) => void;
+  setPushEnabled: (v: boolean) => void;
 }
 
 const PreferencesContext = createContext<PreferencesCtx>({
@@ -25,11 +27,13 @@ const PreferencesContext = createContext<PreferencesCtx>({
   useKnots: false,
   quietStart: 23,
   quietEnd: 7,
+  pushEnabled: true,
   setUse24h: () => {},
   setUseCelsius: () => {},
   setUseKnots: () => {},
   setQuietStart: () => {},
   setQuietEnd: () => {},
+  setPushEnabled: () => {},
 });
 
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
@@ -38,6 +42,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
   const [useKnots, setUseKnotsState] = useState(false);
   const [quietStart, setQuietStartState] = useState(23);
   const [quietEnd, setQuietEndState] = useState(7);
+  const [pushEnabled, setPushEnabledState] = useState(true);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -51,6 +56,7 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
           if (typeof parsed.useKnots === 'boolean') setUseKnotsState(parsed.useKnots);
           if (typeof parsed.quietStart === 'number') setQuietStartState(parsed.quietStart);
           if (typeof parsed.quietEnd === 'number') setQuietEndState(parsed.quietEnd);
+          if (typeof parsed.pushEnabled === 'boolean') setPushEnabledState(parsed.pushEnabled);
         }
       } catch {}
       setHydrated(true);
@@ -59,8 +65,8 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!hydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ use24h, useCelsius, useKnots, quietStart, quietEnd })).catch(() => {});
-  }, [use24h, useCelsius, useKnots, quietStart, quietEnd, hydrated]);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ use24h, useCelsius, useKnots, quietStart, quietEnd, pushEnabled })).catch(() => {});
+  }, [use24h, useCelsius, useKnots, quietStart, quietEnd, pushEnabled, hydrated]);
 
   return (
     <PreferencesContext.Provider value={{
@@ -69,11 +75,13 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
       useKnots,
       quietStart,
       quietEnd,
+      pushEnabled,
       setUse24h: setUse24hState,
       setUseCelsius: setUseCelsiusState,
       setUseKnots: setUseKnotsState,
       setQuietStart: setQuietStartState,
       setQuietEnd: setQuietEndState,
+      setPushEnabled: setPushEnabledState,
     }}>
       {children}
     </PreferencesContext.Provider>

@@ -24,10 +24,9 @@ interface Props {
   loc: Location;
   day: DayForecast;
   verdict: Verdict;
-  freeMode?: boolean;
 }
 
-export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
+export function NightArc({ loc, day, verdict: v }: Props) {
   const { nightVision } = useNightVision();
   const { use24h } = usePreferences();
   const fmt = (s: string) => applyTimeFormat(s, use24h);
@@ -36,7 +35,7 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
   const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.6)';
   const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)';
   const capColor = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.65)';
-  const hasWin = !freeMode && !!day.window;
+  const hasWin = !!day.window;
   const winEndpoints = hasWin && day.window
     ? [day.window.s, day.window.e].map((f) => polar(f))
     : [];
@@ -78,13 +77,7 @@ export function NightArc({ loc, day, verdict: v, freeMode = false }: Props) {
 
       {/* Center content — inside the arc */}
       <View style={styles.arcCenter} pointerEvents="none">
-        {freeMode ? (
-          <>
-            <Text style={[styles.arcCap, { color: capColor }]}>{v.label} Tonight</Text>
-            <Text style={[styles.arcWinTime, { color: textPrimary }]}>{v.word}</Text>
-            <Text style={[styles.arcSub, { color: textDim }]}>over {loc.name} · {day.cloud}% cloud</Text>
-          </>
-        ) : hasWin && day.window ? (
+        {hasWin && day.window ? (
           <>
             <Text style={[styles.arcCap, { color: capColor }]}>{v.label} · Best Window</Text>
             <Text style={[styles.arcWinTime, { color: textPrimary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>

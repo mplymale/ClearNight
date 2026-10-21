@@ -1,11 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Location } from '../data/mockForecast';
 import { buildRealForecast } from '../services/forecastEngine';
 import { supabase } from '../lib/supabase';
+import { syncSiriCache } from '../services/siriForecastCache';
 
 const STORAGE_KEY_LOCATIONS = 'clearnight:locations';
 const STORAGE_KEY_ACTIVE_INDEX = 'clearnight:activeLocIndex';
+
+// If the app has been backgrounded longer than this, refresh forecasts on
+// return rather than showing whatever was last fetched (possibly stale by
+// hours). Chosen to avoid refetching on a quick app-switch glance.
+const STALE_AFTER_MS = 20 * 60 * 1000;
 
 interface LocationsContextValue {
   locations: Location[];
@@ -13,6 +20,8 @@ interface LocationsContextValue {
   setActiveLocIndex: (i: number) => void;
   addLocation: (loc: Location) => void;
   removeLocation: (index: number) => void;
+  clearAllLocations: () => void;
+  refreshAll: () => Promise<void>;
   hydrated: boolean;
   refreshingNames: Set<string>;
   fetchErrorNames: Set<string>;
@@ -25,6 +34,8 @@ const LocationsContext = createContext<LocationsContextValue>({
   setActiveLocIndex: () => {},
   addLocation: () => {},
   removeLocation: () => {},
+  clearAllLocations: () => {},
+  refreshAll: async () => {},
   hydrated: false,
   refreshingNames: new Set(),
   fetchErrorNames: new Set(),
@@ -47,6 +58,11 @@ async function syncLocationsToSupabase(locations: Location[]) {
     longitude: loc.longitude,
     bortle: loc.bortle,
     sort_order: i,
+    // Tonight's already-computed score/window, so the server-side alert
+    // check reads the exact same result the app itself displays instead of
+    // recalculating with a different (and looser) approximation.
+    tonight_score: loc.days[0]?.score ?? null,
+    has_window: loc.days[0] ? loc.days[0].window != null : null,
   }));
   if (rows.length > 0) {
     await supabase.from('locations').upsert(rows, { onConflict: 'user_id,name' });
@@ -130,6 +146,9 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     AsyncStorage.setItem(STORAGE_KEY_LOCATIONS, JSON.stringify(locations)).catch(() => {});
     syncLocationsToSupabase(locations).catch(() => {});
+    // Keeps the Siri App Intents' shared cache in lockstep with whatever the
+    // app itself just displayed — same moment, same data, no separate fetch.
+    syncSiriCache(locations);
   }, [locations, hydrated]);
 
   useEffect(() => {
@@ -137,9 +156,9 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem(STORAGE_KEY_ACTIVE_INDEX, String(activeLocIndex)).catch(() => {});
   }, [activeLocIndex, hydrated]);
 
-  const refreshFromApis = useCallback((loc: Location) => {
+  const refreshFromApis = useCallback((loc: Location): Promise<void> => {
     setRefreshingNames(prev => new Set([...prev, loc.name]));
-    buildRealForecast(loc.latitude, loc.longitude, loc.bortle)
+    return buildRealForecast(loc.latitude, loc.longitude, loc.bortle)
       .then(({ days, dusk, dawn, prime, objects }) => {
         setLocations(prev =>
           prev.map(l => (l.name === loc.name ? { ...l, days, dusk, dawn, prime, objects } : l))
@@ -159,6 +178,34 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     refreshedOnHydrate.current = true;
     locations.forEach(refreshFromApis);
   }, [hydrated, locations, refreshFromApis]);
+
+  // Re-fetch every saved location's forecast — used by pull-to-refresh and
+  // by the foreground-return check below. Reads current locations via a
+  // ref so callers don't need to depend on the array identity.
+  const locationsRef = useRef(locations);
+  locationsRef.current = locations;
+  const refreshAll = useCallback(async () => {
+    await Promise.all(locationsRef.current.map(refreshFromApis));
+  }, [refreshFromApis]);
+
+  // Refresh on returning to the foreground if the app sat backgrounded long
+  // enough that the last-fetched conditions could plausibly be stale.
+  const backgroundedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    const onChange = (next: AppStateStatus) => {
+      if (next === 'active') {
+        const backgroundedAt = backgroundedAtRef.current;
+        backgroundedAtRef.current = null;
+        if (backgroundedAt != null && Date.now() - backgroundedAt > STALE_AFTER_MS) {
+          refreshAll().catch(() => {});
+        }
+      } else {
+        backgroundedAtRef.current = Date.now();
+      }
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [refreshAll]);
 
   const addLocation = useCallback((loc: Location) => {
     setLocations(prev => {
@@ -188,8 +235,13 @@ export function LocationsProvider({ children }: { children: React.ReactNode }) {
     setFetchErrorNames(prev => { const n = new Set(prev); n.delete(name); return n; });
   }, []);
 
+  const clearAllLocations = useCallback(() => {
+    setLocations([]);
+    setActiveLocIndex(0);
+  }, []);
+
   return (
-    <LocationsContext.Provider value={{ locations, activeLocIndex, setActiveLocIndex, addLocation, removeLocation, hydrated, refreshingNames, fetchErrorNames, clearFetchError }}>
+    <LocationsContext.Provider value={{ locations, activeLocIndex, setActiveLocIndex, addLocation, removeLocation, clearAllLocations, refreshAll, hydrated, refreshingNames, fetchErrorNames, clearFetchError }}>
       {children}
     </LocationsContext.Provider>
   );
