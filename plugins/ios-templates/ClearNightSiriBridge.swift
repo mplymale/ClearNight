@@ -15,7 +15,7 @@
 import Foundation
 import React
 
-private let kAppGroupID = "group.com.clearnight.app"
+private let kAppGroupID = "group.com.clearnight.app.siri"
 private let kCacheKey = "clearnight.siri.forecastCache.v1"
 private let kPendingNavKey = "clearnight.siri.pendingNavigation.v1"
 
@@ -75,7 +75,7 @@ enum ClearNightForecastCache {
 }
 
 @objc(ClearNightSiriBridge)
-class ClearNightSiriBridge: NSObject, RCTBridgeModule {
+class ClearNightSiriBridge: NSObject {
     static func moduleName() -> String! { "ClearNightSiriBridge" }
     static func requiresMainQueueSetup() -> Bool { false }
 

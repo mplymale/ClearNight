@@ -1,7 +1,7 @@
 // plugins/withSiriIntents.js
 //
 // Adds Siri / App Intents support to the iOS build:
-//   1. An App Group entitlement (group.com.clearnight.app) shared between
+//   1. An App Group entitlement (group.com.clearnight.app.siri) shared between
 //      the app and any future extension, used as the storage the App
 //      Intents read from.
 //   2. Copies the Swift/Obj-C source files from plugins/ios-templates/ into
@@ -17,7 +17,7 @@ const { withEntitlementsPlist, withXcodeProject, withDangerousMod } = require('@
 const fs = require('fs');
 const path = require('path');
 
-const APP_GROUP = 'group.com.clearnight.app';
+const APP_GROUP = 'group.com.clearnight.app.siri';
 
 const TEMPLATE_FILES = [
   'ClearNightSiriBridge.swift',
@@ -31,10 +31,13 @@ const TEMPLATE_FILES = [
 function withSiriEntitlements(config) {
   return withEntitlementsPlist(config, (config) => {
     const key = 'com.apple.security.application-groups';
-    const existing = Array.isArray(config.modResults[key]) ? config.modResults[key] : [];
-    const groups = new Set(existing);
-    groups.add(APP_GROUP);
-    config.modResults[key] = Array.from(groups);
+    // Deliberately a hard reset, not a merge: a merge here means any stale
+    // App Group identifier (e.g. left over from before this one was
+    // renamed) keeps reappearing in every regenerated ios/ build, which is
+    // exactly what happened once already. This file is the single source
+    // of truth for which App Group this app uses, so it should fully own
+    // this entitlement key, not accumulate into whatever was there before.
+    config.modResults[key] = [APP_GROUP];
     return config;
   });
 }
@@ -60,27 +63,24 @@ function withSiriFiles(config) {
 function withSiriXcodeProject(config) {
   return withXcodeProject(config, (config) => {
     const project = config.modResults;
-    const groupName = 'SiriIntents';
-
-    // Create the group and file references.
-    const group = project.addPbxGroup(TEMPLATE_FILES, groupName, groupName);
-
-    // Nest the new group under the project's main group (the root group has
-    // no name/path of its own) — the standard pattern for Expo config
-    // plugins that add native source files.
-    const groups = project.hash.project.objects['PBXGroup'];
-    Object.keys(groups).forEach((key) => {
-      if (groups[key] && groups[key].name === undefined && groups[key].path === undefined) {
-        project.addToPbxGroup(group.uuid, key);
-      }
-    });
-
-    // Add each file to the main target's Sources build phase so it's
-    // actually compiled — not just visible in the file tree.
+    const targetName = config.modRequest.projectName; // "ClearNight"
     const target = project.getFirstTarget().uuid;
+    const mainGroupUuid = project.getFirstProject().firstProject.mainGroup;
+
+    // This project's own convention (see AppDelegate.swift, SplashScreen.storyboard,
+    // etc. in the generated pbxproj) is: files are direct children of the project's
+    // main group, with the target folder name baked into each file's own `path`
+    // (e.g. "ClearNight/AppDelegate.swift") rather than organized through a nested
+    // PBXGroup hierarchy. Match that exactly instead of creating a separate
+    // "SiriIntents" group — two earlier attempts at a nested group each produced a
+    // resolved path that didn't match where expo prebuild actually copies these
+    // files on disk (ios/<targetName>/SiriIntents/), causing "Build input files
+    // cannot be found" at build time. A single, explicit, unambiguous path per file
+    // avoids that class of bug entirely.
     for (const file of TEMPLATE_FILES) {
+      const relPath = `${targetName}/SiriIntents/${file}`;
       if (file.endsWith('.swift') || file.endsWith('.m')) {
-        project.addSourceFile(`${groupName}/${file}`, { target }, group.uuid);
+        project.addSourceFile(relPath, { target }, mainGroupUuid);
       }
     }
 
