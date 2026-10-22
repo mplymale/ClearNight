@@ -9,7 +9,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { Component, useEffect, type ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 import { NightVisionProvider } from '../src/context/NightVisionContext';
 import { PlanProvider } from '../src/context/PlanContext';
@@ -18,6 +18,8 @@ import { AlertsProvider } from '../src/context/AlertsContext';
 import { FavoritesProvider } from '../src/context/FavoritesContext';
 import { InterestsProvider } from '../src/context/InterestsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
+import { initializeAds } from '../src/services/ads';
+import { useAppOpenAdGate } from '../src/hooks/useAppOpenAdGate';
 import { PreferencesProvider } from '../src/context/PreferencesContext';
 import { AuthProvider } from '../src/context/AuthContext';
 import { useNotificationRouting } from '../src/services/notificationRouting';
@@ -39,6 +41,29 @@ function SiriRouter() {
   return null;
 }
 
+// Owns the free-tier App Open interstitial end to end (preload, trigger
+// rules, show) — see useAppOpenAdGate for the actual logic.
+function AdsGate() {
+  useAppOpenAdGate();
+  return null;
+}
+
+// A third-party ad SDK hiccup should never be able to take the whole app
+// down with it — this is the backstop. AdsGate renders nothing either way,
+// so catching here just means "no ad this session," never a blank screen.
+class AdsErrorBoundary extends Component<{ children: ReactNode }, { crashed: boolean }> {
+  state = { crashed: false };
+  static getDerivedStateFromError() {
+    return { crashed: true };
+  }
+  componentDidCatch(error: unknown) {
+    if (__DEV__) console.warn('[AdsGate] swallowed a crash so it would not take down the app:', error);
+  }
+  render() {
+    return this.state.crashed ? null : this.props.children;
+  }
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_600SemiBold,
@@ -51,6 +76,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded || fontError) SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    initializeAds();
+  }, []);
 
   if (!fontsLoaded && !fontError) return null;
 
@@ -66,6 +95,9 @@ export default function RootLayout() {
       <SubscriptionProvider>
         <NotificationRouter />
         <SiriRouter />
+        <AdsErrorBoundary>
+          <AdsGate />
+        </AdsErrorBoundary>
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
           <Stack.Screen name="intro" options={{ animation: 'fade', gestureEnabled: false, contentStyle: { backgroundColor: '#04060e' } }} />

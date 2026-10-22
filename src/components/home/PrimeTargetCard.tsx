@@ -8,6 +8,7 @@ import { useNightVision, NV_ACCENT, NV_ACCENT_SOFT, NV_BORDER, NV_CARD, NV_TEXT,
 import { useFavorites, favoritedObjectIndices } from '../../context/FavoritesContext';
 import { useInterests } from '../../context/InterestsContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
+import { HomeNativeAdCard } from '../ads/HomeNativeAdCard';
 
 // Parse a time string like "9:10p", "4:39a", "10:10pm" into a Date today,
 // pushing AM times (dawn/window-ends) to tomorrow if they fall before a PM anchor.
@@ -224,6 +225,7 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
           cloudPct={day.cloud}
           onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
         />
+        <HomeNativeAdCard />
       </View>
     );
   }
