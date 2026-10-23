@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import Purchases, { PurchasesOffering, PurchasesPackage } from 'react-native-purchases';
 import { PREMIUM_ENTITLEMENT_ID, useSubscription } from '../src/context/SubscriptionContext';
+import { useAuth } from '../src/context/AuthContext';
+import { track } from '../src/services/analytics';
 import { useNightVision, NV_ACCENT, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { AppLogo } from '../src/components/common/AppLogo';
 import { CheckIcon } from '../src/components/common/CheckIcon';
@@ -170,12 +172,22 @@ export default function PaywallScreen() {
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const { setDevPreview } = useSubscription();
+  const { user } = useAuth();
 
   useEffect(() => {
     Purchases.getOfferings()
       .then((offerings) => setOffering(offerings.current))
       .catch(() => {});
   }, []);
+
+  // Paywall view is tracked separately from the generic $pageview
+  // AnalyticsRouter already fires on every route — this one carries the
+  // `returnTo` context (what sent someone here) so the conversion funnel is
+  // actually attributable to a trigger point, not just "they hit /paywall".
+  useEffect(() => {
+    if (!user?.id) return;
+    track('paywall_viewed', user.id, { returnTo: returnTo ?? null });
+  }, [user?.id, returnTo]);
 
   async function handlePurchase() {
     const pkg = packageForPlan(offering, plan);
@@ -188,9 +200,11 @@ export default function PaywallScreen() {
       await Purchases.purchasePackage(pkg);
       setDevPreview(null); // a real purchase should always show real status, even mid-preview
       setDone(true);
+      if (user?.id) track('paywall_purchase_succeeded', user.id, { plan });
     } catch (e: any) {
       if (!e?.userCancelled) {
         Alert.alert('Purchase failed', 'Something went wrong. Please try again.');
+        if (user?.id) track('paywall_purchase_failed', user.id, { plan });
       }
     } finally {
       setPurchasing(false);

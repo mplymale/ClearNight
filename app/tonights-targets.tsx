@@ -10,6 +10,8 @@ import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV
 import { SkyObject } from '../src/data/mockForecast';
 import { METEOR_SHOWERS } from '../src/data/skyCatalog';
 import { showerPeakAltitude } from '../src/services/skyObjects';
+import { useSubscription } from '../src/context/SubscriptionContext';
+import { HomeNativeAdCard } from '../src/components/ads/HomeNativeAdCard';
 
 function nextMeteorShower(): { name: string; peakMonth: number; peakDay: number } | null {
   const now = new Date();
@@ -46,6 +48,8 @@ export default function TonightsSkyScreen() {
   const { favorites, toggleFavorite } = useFavorites();
   const { use24h } = usePreferences();
   const { nightVision } = useNightVision();
+  const { status } = useSubscription();
+  const isFree = status === 'free';
   const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
   const containerBg = nightVision ? '#150400' : '#080b12';
   const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
@@ -140,6 +144,12 @@ export default function TonightsSkyScreen() {
           </TouchableOpacity>
         </View>
 
+        {isFree && (
+          <View style={styles.adSection}>
+            <HomeNativeAdCard />
+          </View>
+        )}
+
         {categoryOrder.slice(1).map((cat) => {
           const items = grouped[cat];
           const isMeteors = cat === 'meteors';
@@ -231,6 +241,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#080b12',
+  },
+  adSection: {
+    marginBottom: 20,
+    marginHorizontal: -18,
   },
   nav: {
     flexDirection: 'row',

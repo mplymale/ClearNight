@@ -6,7 +6,7 @@ import {
 } from '@expo-google-fonts/hanken-grotesk';
 import { Sora_600SemiBold } from '@expo-google-fonts/sora';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { Component, useEffect, type ReactNode } from 'react';
@@ -21,9 +21,10 @@ import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { initializeAds } from '../src/services/ads';
 import { useAppOpenAdGate } from '../src/hooks/useAppOpenAdGate';
 import { PreferencesProvider } from '../src/context/PreferencesContext';
-import { AuthProvider } from '../src/context/AuthContext';
+import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { useNotificationRouting } from '../src/services/notificationRouting';
 import { useSiriRouting } from '../src/services/siriRouting';
+import { track } from '../src/services/analytics';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,6 +39,22 @@ function NotificationRouter() {
 // whichever saved spot was asked about once the app comes to the foreground.
 function SiriRouter() {
   useSiriRouting();
+  return null;
+}
+
+// Fires a PostHog pageview on every route change — gives the actual
+// per-screen view counts the release plan called for (home, object-detail,
+// factor-detail, settings, etc.), without instrumenting each screen one by
+// one. See src/services/analytics.ts.
+function AnalyticsRouter() {
+  const pathname = usePathname();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user?.id) return;
+    track('$pageview', user.id, { path: pathname, $current_url: pathname });
+  }, [pathname, user?.id]);
+
   return null;
 }
 
@@ -95,6 +112,7 @@ export default function RootLayout() {
       <SubscriptionProvider>
         <NotificationRouter />
         <SiriRouter />
+        <AnalyticsRouter />
         <AdsErrorBoundary>
           <AdsGate />
         </AdsErrorBoundary>

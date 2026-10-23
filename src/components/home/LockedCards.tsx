@@ -107,9 +107,9 @@ export function LockedCards({ verdict: v, weekScores, onUpgrade }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    gap: 11,
+    gap: 12,
     paddingHorizontal: 18,
-    paddingTop: 18,
+    paddingTop: 12,
   },
 
   // ── Card base ──

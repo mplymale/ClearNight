@@ -437,12 +437,17 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Night arc + cards — swipeable block */}
-        <Animated.View
-          style={{ transform: [{ translateX: swipeX }] }}
-          {...(isFree ? {} : arcSwiper.panHandlers)}
-        >
-          <NightArc loc={loc} day={day} verdict={verdict} />
+        {/* Night arc + cards — swipeable block. The slide animation stays on
+            this whole block so the visual motion is unchanged, but the pan
+            responder itself is scoped down to just the NightArc wrapper
+            below — NightArc has no touchable of its own, while FactorChips,
+            MoonHumidityRow, and the target cards in FeaturedTargets all do,
+            and they were losing touch ownership to this responder on almost
+            every touch-down when it covered the whole block. */}
+        <Animated.View style={{ transform: [{ translateX: swipeX }] }}>
+          <View {...(isFree ? {} : arcSwiper.panHandlers)}>
+            <NightArc loc={loc} day={day} verdict={verdict} />
+          </View>
 
             {/* Factor chips — premium only (day-by-day breakdown) */}
           {!isFree && (

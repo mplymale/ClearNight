@@ -75,60 +75,78 @@ export function HomeNativeAdCard() {
   const accent = nightVision ? NV_ACCENT : '#7ef0d2';
   const ctaTextColor = nightVision ? '#180300' : '#04130f';
 
+  // NativeAdView is a thin native wrapper required for Google's click/impression
+  // attribution — it doesn't reliably apply RN's flexbox (padding, alignItems,
+  // absolute-position containment) to its own style prop. So it stays unstyled
+  // here, and all real visual layout — including the "Ad" badge's positioning
+  // context — lives on the plain View inside it, which Yoga lays out normally.
   return (
-    <NativeAdView
-      nativeAd={nativeAd}
-      style={[styles.card, { borderColor: cardBorder, backgroundColor: cardBg }]}
-    >
-      <View style={styles.adBadge} pointerEvents="none">
-        <Text style={[styles.adBadgeText, { color: badgeColor }]}>Ad</Text>
-      </View>
+    <NativeAdView nativeAd={nativeAd} style={styles.adViewWrapper}>
+      <View style={[styles.card, { borderColor: cardBorder, backgroundColor: cardBg }]}>
+        {nativeAd.icon?.url && (
+          <NativeAsset assetType={NativeAssetType.ICON}>
+            <Image
+              source={{ uri: nativeAd.icon.url }}
+              style={styles.icon}
+              resizeMode="contain"
+            />
+          </NativeAsset>
+        )}
 
-      {nativeAd.icon?.url && (
-        <NativeAsset assetType={NativeAssetType.ICON}>
-          <Image source={{ uri: nativeAd.icon.url }} style={styles.icon} />
-        </NativeAsset>
-      )}
-
-      <View style={styles.main}>
-        <NativeAsset assetType={NativeAssetType.HEADLINE}>
-          <Text style={[styles.headline, { color: textPrimary }]} numberOfLines={1}>
-            {nativeAd.headline}
-          </Text>
-        </NativeAsset>
-        <NativeAsset assetType={NativeAssetType.ADVERTISER}>
-          <Text style={[styles.advertiser, { color: textDim }]} numberOfLines={1}>
-            {nativeAd.advertiser ? `${nativeAd.advertiser} · Sponsored` : 'Sponsored'}
-          </Text>
-        </NativeAsset>
-      </View>
-
-      <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
-        <View style={[styles.cta, { backgroundColor: accent }]}>
-          <Text style={[styles.ctaText, { color: ctaTextColor }]} numberOfLines={1}>
-            {nativeAd.callToAction || 'View'}
-          </Text>
+        <View style={styles.main}>
+          <NativeAsset assetType={NativeAssetType.HEADLINE}>
+            <Text style={[styles.headline, { color: textPrimary }]} numberOfLines={1}>
+              {nativeAd.headline}
+            </Text>
+          </NativeAsset>
+          <NativeAsset assetType={NativeAssetType.ADVERTISER}>
+            <Text style={[styles.advertiser, { color: textDim }]} numberOfLines={1}>
+              {nativeAd.advertiser ? `${nativeAd.advertiser} · Sponsored` : 'Sponsored'}
+            </Text>
+          </NativeAsset>
         </View>
-      </NativeAsset>
+
+        {/* Stacked in-flow (not absolutely positioned) so the "Ad" disclosure
+            badge can never overlap the CTA button, whatever the card's actual
+            content height ends up being. */}
+        <View style={styles.trailing}>
+          <View style={styles.adBadge} pointerEvents="none">
+            <Text style={[styles.adBadgeText, { color: badgeColor }]}>Ad</Text>
+          </View>
+
+          <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
+            <View style={[styles.cta, { backgroundColor: accent }]}>
+              <Text style={[styles.ctaText, { color: ctaTextColor }]} numberOfLines={1}>
+                {nativeAd.callToAction || 'View'}
+              </Text>
+            </View>
+          </NativeAsset>
+        </View>
+      </View>
     </NativeAdView>
   );
 }
 
 const styles = StyleSheet.create({
+  adViewWrapper: {
+    marginHorizontal: 18,
+  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginHorizontal: 18,
     padding: 15,
     paddingHorizontal: 18,
     borderRadius: 20,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  trailing: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    gap: 6,
   },
   adBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 14,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 6,
     paddingVertical: 2,
@@ -145,12 +163,12 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
+    alignSelf: 'center',
   },
   main: {
     flex: 1,
     gap: 2,
     minWidth: 0,
-    paddingRight: 28,
   },
   headline: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
