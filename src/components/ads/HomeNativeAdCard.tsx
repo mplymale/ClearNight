@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import {
   NativeAd,
+  NativeAdEventType,
   NativeAdView,
   NativeAsset,
   NativeAssetType,
   TestIds,
 } from 'react-native-google-mobile-ads';
+import { AdFormat, trackAdRevenue } from '../../services/adRevenueTracker';
 import {
   useNightVision,
   NV_ACCENT,
@@ -16,10 +18,10 @@ import {
   NV_TEXT_DIM,
 } from '../../context/NightVisionContext';
 
-// Google's public test ad unit ID — safe to ship to TestFlight as-is, but
-// swap for the real native ad unit ID before the App Store release build.
-// See clearnight-next-release-plan.md, Release A #2.
-const AD_UNIT_ID = TestIds.NATIVE;
+// Real AdMob account live as of Oct 22 (Release A #2). Test IDs still used
+// in dev builds so nobody's own testing counts as real impressions against
+// the real account.
+const AD_UNIT_ID = __DEV__ ? TestIds.NATIVE : 'ca-app-pub-8886357120051718/2830301096';
 
 // Free-tier-only native ad card for the home screen target list. Deliberately
 // built to the same shape as the real target cards it sits beside
@@ -45,6 +47,13 @@ export function HomeNativeAdCard() {
         }
         loadedAd = ad;
         setNativeAd(ad);
+        ad.addAdEventListener(NativeAdEventType.PAID, (event) => {
+          trackAdRevenue(event, {
+            adFormat: AdFormat.nativeAd,
+            adUnitId: AD_UNIT_ID,
+            impressionId: ad.responseId,
+          });
+        });
       })
       .catch(() => {
         // No fill / network error — card just doesn't appear this session.

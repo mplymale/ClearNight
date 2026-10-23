@@ -3,11 +3,12 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAppOpenAd, TestIds } from 'react-native-google-mobile-ads';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useNightVision } from '../context/NightVisionContext';
+import { AdFormat, trackAdRevenue } from '../services/adRevenueTracker';
 
-// Google's public test ad unit ID — swap for the real App Open ad unit ID
-// before the App Store release build. See clearnight-next-release-plan.md,
-// Release A #2.
-const AD_UNIT_ID = TestIds.APP_OPEN;
+// Real AdMob account live as of Oct 22 (Release A #2). Test IDs still used
+// in dev builds so nobody's own testing counts as real impressions against
+// the real account.
+const AD_UNIT_ID = __DEV__ ? TestIds.APP_OPEN : 'ca-app-pub-8886357120051718/5299631897';
 
 // How long the app has to have been backgrounded before a return visit is
 // eligible to show the ad. This — not launch count — is the gate: Mike was
@@ -54,7 +55,7 @@ export function useAppOpenAdGate() {
   const { nightVision } = useNightVision();
   const isFree = status === 'free';
 
-  const { status: adStatus, show, load } = useAppOpenAd({
+  const { status: adStatus, show, load, revenue } = useAppOpenAd({
     adUnitId: isFree ? AD_UNIT_ID : null,
     requestOptions: REQUEST_OPTIONS,
   });
@@ -63,6 +64,13 @@ export function useAppOpenAdGate() {
   const shownThisSessionRef = useRef(false);
   const backgroundedAtRef = useRef<number | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  // Set right before `show()` so the revenue event this impression produces
+  // (handled in the effect below) can be tied to the impression that earned
+  // it, rather than a fresh id per render.
+  const impressionIdRef = useRef<string | null>(null);
+  // Guards against double-reporting the same PaidEvent object to RevenueCat
+  // if this effect re-runs for an unrelated reason.
+  const lastReportedRevenueRef = useRef<typeof revenue>(null);
 
   useEffect(() => {
     if (adStatus === 'loaded') loadedAtRef.current = Date.now();
@@ -102,6 +110,7 @@ export function useAppOpenAdGate() {
           }
 
           shownThisSessionRef.current = true;
+          impressionIdRef.current = `app_open-${Date.now()}-${Math.random().toString(36).slice(2)}`;
           show();
         } catch {
           // An ad-SDK hiccup here should never be able to take down the
@@ -113,4 +122,17 @@ export function useAppOpenAdGate() {
 
     return () => sub.remove();
   }, [isFree, nightVision, adStatus, load, show]);
+
+  // AdMob reports revenue slightly after the impression itself — this
+  // fires independently of the gate logic above, whenever a new PaidEvent
+  // shows up for the ad this hook is currently holding.
+  useEffect(() => {
+    if (!revenue || revenue === lastReportedRevenueRef.current || !impressionIdRef.current) return;
+    lastReportedRevenueRef.current = revenue;
+    trackAdRevenue(revenue, {
+      adFormat: AdFormat.appOpen,
+      adUnitId: AD_UNIT_ID,
+      impressionId: impressionIdRef.current,
+    });
+  }, [revenue]);
 }
