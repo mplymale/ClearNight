@@ -25,6 +25,8 @@ import { DARK_SKY_PLACES } from '../src/data/darkSkyPlaces';
 import { haversineMiles, formatMiles } from '../src/services/geo';
 import { estimateBortle } from '../src/services/bortleEstimate';
 import { CheckIcon } from '../src/components/common/CheckIcon';
+import { MilkyWayIcon } from '../src/components/common/MilkyWayIcon';
+import { RingedPlanetIcon } from '../src/components/common/RingedPlanetIcon';
 import { AppLogo } from '../src/components/common/AppLogo';
 import { AppWordmark } from '../src/components/common/AppWordmark';
 
@@ -136,11 +138,16 @@ function Dots({ step }: { step: number }) {
 
 // ── Preference cards ──────────────────────────────────────────────────────────
 
+// 'milky' and 'planets' use dedicated SVG icons instead of their original
+// 🌌/🪐 emoji — those are color-emoji-presentation characters that weren't
+// rendering reliably in this build (showed as a "glyph missing" box). ✦/☄
+// are plain text-presentation symbols, not full-color emoji, and render
+// fine as-is, so those two were left alone.
 const PREFS = [
-  { k: 'milky',   emoji: '🌌', name: 'Milky Way',  sub: 'Wide-field core season' },
-  { k: 'deep',    emoji: '✦',  name: 'Deep sky',   sub: 'Nebulae & galaxies' },
-  { k: 'planets', emoji: '🪐', name: 'Planets',    sub: 'Moon, Jupiter, Saturn' },
-  { k: 'meteors', emoji: '☄',  name: 'Meteors',    sub: 'Showers & fireballs' },
+  { k: 'milky',   Icon: MilkyWayIcon,    name: 'Milky Way',  sub: 'Wide-field core season' },
+  { k: 'deep',    emoji: '✦',            name: 'Deep sky',   sub: 'Nebulae & galaxies' },
+  { k: 'planets', Icon: RingedPlanetIcon, name: 'Planets',    sub: 'Moon, Jupiter, Saturn' },
+  { k: 'meteors', emoji: '☄',            name: 'Meteors',    sub: 'Showers & fireballs' },
 ];
 
 // ── Suggested locations ───────────────────────────────────────────────────────
@@ -494,7 +501,11 @@ function StepInterests({ onDone }: { onDone: () => void }) {
                 <View style={[styles.prefCheck, on && { backgroundColor: ACCENT, borderColor: ACCENT }]}>
                   {on && <CheckIcon size={12} color="#04130f" strokeWidth={2.8} />}
                 </View>
-                <Text style={styles.prefEmoji}>{p.emoji}</Text>
+                {p.Icon ? (
+                  <p.Icon size={24} color="#fff" />
+                ) : (
+                  <Text style={styles.prefEmoji}>{p.emoji}</Text>
+                )}
                 <Text style={styles.prefName}>{p.name}</Text>
                 <Text style={styles.prefSub}>{p.sub}</Text>
               </TouchableOpacity>

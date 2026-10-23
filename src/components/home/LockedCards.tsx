@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Rect } from 'react-native-svg';
 import { Verdict } from '../../constants/verdicts';
 import { useNightVision, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM } from '../../context/NightVisionContext';
+import { HomeNativeAdCard } from '../ads/HomeNativeAdCard';
 
 // ── Tiny icons ──────────────────────────────────────────────────────────────
 
@@ -101,6 +102,12 @@ export function LockedCards({ verdict: v, weekScores, onUpgrade }: Props) {
           <Text style={styles.ctaBtnText}>Upgrade</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Ad — last in the stack, per Mike: tried 2nd (right after the hero
+          card, felt too ad-forward on first load) and 3rd (sandwiched
+          between the two upsell cards); bottom reads least pushy. Still
+          free-tier only — LockedCards is only rendered for free users. */}
+      <HomeNativeAdCard />
     </View>
   );
 }

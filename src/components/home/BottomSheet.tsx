@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { CloudIcon } from '../common/CloudIcon';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
@@ -315,7 +316,7 @@ export function BottomSheet({ loc, day, verdict: v, locIndex }: Props) {
 
             {loc.objects.length === 0 && loc.prime.peakAlt <= 0 && (
               <View style={[styles.emptyState, { borderColor: cardBorder, backgroundColor: cardBg }]}>
-                <Text style={[styles.emptyIcon, { color: textFaint }]}>☁</Text>
+                <CloudIcon size={28} color={textFaint} />
                 <Text style={[styles.emptyTitle, { color: textPrimary }]}>Nothing clears the horizon tonight</Text>
                 <Text style={[styles.emptyBody, { color: textFaint }]}>
                   Clouds or geometry are keeping the sky closed. Check back tomorrow or try a darker location.

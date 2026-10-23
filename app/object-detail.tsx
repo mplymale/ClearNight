@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import { StarIcon } from '../src/components/common/StarIcon';
 import { AltPoint, DayForecast } from '../src/data/mockForecast';
 import { VERDICTS } from '../src/constants/verdicts';
 import { usePlan } from '../src/context/PlanContext';
@@ -385,15 +386,22 @@ export default function ObjectDetailScreen() {
             params: { returnTo: 'object-detail', locIndex, type, objIndex: objIndex ?? '' },
           })}
         >
-          <Text style={[styles.alertBtnText, { color: isPro ? (alertSet ? accent : '#04130f') : 'rgba(255,255,255,0.55)' }]}>
-            {isPro
-              ? alertSet
+          {isPro ? (
+            <Text style={[styles.alertBtnText, { color: alertSet ? accent : '#04130f' }]}>
+              {alertSet
                 ? alertCount > 0
                   ? `✓ ${alertCount} alert${alertCount === 1 ? '' : 's'} set`
                   : '✓ Watching'
-                : 'Set alert'
-              : '⭐ Upgrade for alerts'}
-          </Text>
+                : 'Set alert'}
+            </Text>
+          ) : (
+            <View style={styles.alertBtnUpgradeRow}>
+              <StarIcon size={12} color="rgba(255,255,255,0.55)" />
+              <Text style={[styles.alertBtnText, { color: 'rgba(255,255,255,0.55)' }]}>
+                Upgrade for alerts
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
     </LinearGradient>
@@ -610,6 +618,11 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 15,
     fontWeight: '600',
+  },
+  alertBtnUpgradeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
 
 });

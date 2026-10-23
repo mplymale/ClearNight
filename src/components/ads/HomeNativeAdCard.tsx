@@ -6,6 +6,7 @@ import {
   NativeAdView,
   NativeAsset,
   NativeAssetType,
+  NativeMediaView,
   TestIds,
 } from 'react-native-google-mobile-ads';
 import { AdFormat, trackAdRevenue } from '../../services/adRevenueTracker';
@@ -32,6 +33,16 @@ const AD_UNIT_ID = __DEV__ ? TestIds.NATIVE : 'ca-app-pub-8886357120051718/28303
 export function HomeNativeAdCard() {
   const { nightVision } = useNightVision();
   const [nativeAd, setNativeAd] = useState<NativeAd | null>(null);
+  // NativeAdView's own registered native bounds don't always reliably match
+  // a decimal (non-integer) RN-computed height — that mismatch is what the
+  // AdMob native ad validator flags as "[asset] outside native ad view."
+  // Measuring the actual content once laid out and feeding back a rounded
+  // integer height fixes it.
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
+  // A '100%' style on MediaView wasn't reliably resolving (rendered as a
+  // small square instead of spanning the card), so its width is measured
+  // off the actual card layout and passed in as an explicit number instead.
+  const [measuredWidth, setMeasuredWidth] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,46 +92,70 @@ export function HomeNativeAdCard() {
   // here, and all real visual layout — including the "Ad" badge's positioning
   // context — lives on the plain View inside it, which Yoga lays out normally.
   return (
-    <NativeAdView nativeAd={nativeAd} style={styles.adViewWrapper}>
-      <View style={[styles.card, { borderColor: cardBorder, backgroundColor: cardBg }]}>
-        {nativeAd.icon?.url && (
-          <NativeAsset assetType={NativeAssetType.ICON}>
-            <Image
-              source={{ uri: nativeAd.icon.url }}
-              style={styles.icon}
-              resizeMode="contain"
-            />
-          </NativeAsset>
+    <NativeAdView
+      nativeAd={nativeAd}
+      style={[styles.adViewWrapper, measuredHeight != null && { height: measuredHeight }]}
+    >
+      <View
+        style={[styles.card, { borderColor: cardBorder, backgroundColor: cardBg }]}
+        onLayout={(e) => {
+          const { width: w, height: h } = e.nativeEvent.layout;
+          const roundedH = Math.ceil(h);
+          const roundedW = Math.round(w);
+          if (roundedH !== measuredHeight) setMeasuredHeight(roundedH);
+          if (roundedW !== measuredWidth) setMeasuredWidth(roundedW);
+        }}
+      >
+        {/* Required by AdMob's native ad policy: the main image/video asset
+            must render through MediaView, not a plain Image. Bleeds edge to
+            edge above the padded content row; `card` keeps overflow hidden
+            so this clips to the card's own rounded top corners. Omitted
+            entirely on a no-media-content fill rather than reserving empty
+            space for it. */}
+        {nativeAd.mediaContent && measuredWidth != null && (
+          <NativeMediaView style={[styles.media, { width: measuredWidth }]} resizeMode="contain" />
         )}
 
-        <View style={styles.main}>
-          <NativeAsset assetType={NativeAssetType.HEADLINE}>
-            <Text style={[styles.headline, { color: textPrimary }]} numberOfLines={1}>
-              {nativeAd.headline}
-            </Text>
-          </NativeAsset>
-          <NativeAsset assetType={NativeAssetType.ADVERTISER}>
-            <Text style={[styles.advertiser, { color: textDim }]} numberOfLines={1}>
-              {nativeAd.advertiser ? `${nativeAd.advertiser} · Sponsored` : 'Sponsored'}
-            </Text>
-          </NativeAsset>
-        </View>
+        <View style={styles.content}>
+          {nativeAd.icon?.url && (
+            <NativeAsset assetType={NativeAssetType.ICON}>
+              <Image
+                source={{ uri: nativeAd.icon.url }}
+                style={styles.icon}
+                resizeMode="contain"
+              />
+            </NativeAsset>
+          )}
 
-        {/* Stacked in-flow (not absolutely positioned) so the "Ad" disclosure
-            badge can never overlap the CTA button, whatever the card's actual
-            content height ends up being. */}
-        <View style={styles.trailing}>
-          <View style={styles.adBadge} pointerEvents="none">
-            <Text style={[styles.adBadgeText, { color: badgeColor }]}>Ad</Text>
+          <View style={styles.main}>
+            <NativeAsset assetType={NativeAssetType.HEADLINE}>
+              <Text style={[styles.headline, { color: textPrimary }]} numberOfLines={1}>
+                {nativeAd.headline}
+              </Text>
+            </NativeAsset>
+            <NativeAsset assetType={NativeAssetType.ADVERTISER}>
+              <Text style={[styles.advertiser, { color: textDim }]} numberOfLines={1}>
+                {nativeAd.advertiser ? `${nativeAd.advertiser} · Sponsored` : 'Sponsored'}
+              </Text>
+            </NativeAsset>
           </View>
 
-          <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
-            <View style={[styles.cta, { backgroundColor: accent }]}>
-              <Text style={[styles.ctaText, { color: ctaTextColor }]} numberOfLines={1}>
-                {nativeAd.callToAction || 'View'}
-              </Text>
+          {/* Stacked in-flow (not absolutely positioned) so the "Ad" disclosure
+              badge can never overlap the CTA button, whatever the card's actual
+              content height ends up being. */}
+          <View style={styles.trailing}>
+            <View style={styles.adBadge} pointerEvents="none">
+              <Text style={[styles.adBadgeText, { color: badgeColor }]}>Ad</Text>
             </View>
-          </NativeAsset>
+
+            <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
+              <View style={[styles.cta, { backgroundColor: accent }]}>
+                <Text style={[styles.ctaText, { color: ctaTextColor }]} numberOfLines={1}>
+                  {nativeAd.callToAction || 'View'}
+                </Text>
+              </View>
+            </NativeAsset>
+          </View>
         </View>
       </View>
     </NativeAdView>
@@ -129,17 +164,35 @@ export function HomeNativeAdCard() {
 
 const styles = StyleSheet.create({
   adViewWrapper: {
-    marginHorizontal: 18,
+    // No margin on purpose — inherits whatever horizontal inset its parent
+    // container provides (LockedCards' own paddingHorizontal), same as the
+    // other cards it sits beside; vertical spacing comes from that
+    // container's own `gap`. A self-imposed margin here is what made it
+    // double up with the parent's padding and render too wide/misaligned.
   },
   card: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  media: {
+    // Width is set numerically inline (see MEDIA_WIDTH) rather than here.
+    // Video's back on (ad unit allows both image + video again) — now that
+    // the ad sits last in the stack instead of right after the hero card,
+    // Mike's fine with it reading bigger/more video-like down there. No
+    // fixed height, so a normal-aspect creative displays at its real
+    // proportions with nothing cropped off; `maxHeight` just stops an
+    // unusually tall/near-square creative from ballooning past a reasonable
+    // size. `contain` (the resizeMode prop) means a creative that hits that
+    // cap letterboxes instead of getting cropped.
+    maxHeight: 280,
+  },
+  content: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     padding: 15,
     paddingHorizontal: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   trailing: {
     flexShrink: 0,

@@ -244,7 +244,9 @@ const styles = StyleSheet.create({
   },
   adSection: {
     marginBottom: 20,
-    marginHorizontal: -18,
+    // No compensating negative margin anymore — HomeNativeAdCard no longer
+    // imposes its own horizontal margin, so this naturally inherits `list`'s
+    // paddingHorizontal (16) like every other row here.
   },
   nav: {
     flexDirection: 'row',

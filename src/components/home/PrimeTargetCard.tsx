@@ -8,7 +8,7 @@ import { useNightVision, NV_ACCENT, NV_ACCENT_SOFT, NV_BORDER, NV_CARD, NV_TEXT,
 import { useFavorites, favoritedObjectIndices } from '../../context/FavoritesContext';
 import { useInterests } from '../../context/InterestsContext';
 import { usePreferences, applyTimeFormat } from '../../context/PreferencesContext';
-import { HomeNativeAdCard } from '../ads/HomeNativeAdCard';
+import { CloudIcon } from '../common/CloudIcon';
 
 // Parse a time string like "9:10p", "4:39a", "10:10pm" into a Date today,
 // pushing AM times (dawn/window-ends) to tomorrow if they fall before a PM anchor.
@@ -145,9 +145,12 @@ function TargetCard({ eyebrow, display, accent, cardBorder, cardBg, clouded, clo
           <Text style={[styles.eyebrow, { color: accent }]}>{eyebrow}</Text>
           <Text style={[styles.name, { color: textPrimary }]}>{display.name}</Text>
           <Text style={[styles.sub, { color: textDim }]}>{display.sub}</Text>
-          <Text style={[styles.meta, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)' }]}>
-            ☁ Clouded out · {cloudPct}% cloud
-          </Text>
+          <View style={styles.metaRow}>
+            <CloudIcon size={12} color={nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)'} />
+            <Text style={[styles.meta, { color: nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.45)' }]}>
+              Clouded out · {cloudPct}% cloud
+            </Text>
+          </View>
         </View>
       ) : (
         <>
@@ -225,7 +228,6 @@ export function FeaturedTargets({ loc, day, verdict: v, locIndex, freeMode }: Pr
           cloudPct={day.cloud}
           onPress={() => router.push({ pathname: '/object-detail', params: { locIndex: String(locIndex), type: 'prime' } })}
         />
-        <HomeNativeAdCard />
       </View>
     );
   }
@@ -447,6 +449,11 @@ const styles = StyleSheet.create({
     fontFamily: 'HankenGrotesk_400Regular',
     fontSize: 12,
     color: 'rgba(255,255,255,0.72)',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     marginTop: 6,
   },
   metaBold: {

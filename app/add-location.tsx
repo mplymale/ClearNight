@@ -18,6 +18,7 @@ import { useFavorites } from '../src/context/FavoritesContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
+import { StarIcon } from '../src/components/common/StarIcon';
 import { mkLocFromPlace } from '../src/data/mockForecast';
 import { haversineMiles, formatMiles } from '../src/services/geo';
 import { estimateBortle } from '../src/services/bortleEstimate';
@@ -340,7 +341,10 @@ export default function AddLocationScreen() {
         {isFree && hasLocation && (
           <TouchableOpacity style={styles.upgradeBanner} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
             <View style={styles.upgradeBannerMain}>
-              <Text style={[styles.upgradeBannerTitle, { color: textPrimary }]}>⭐ Unlock multiple spots</Text>
+              <View style={styles.upgradeBannerTitleRow}>
+                <StarIcon size={13} color={textPrimary} />
+                <Text style={[styles.upgradeBannerTitle, { color: textPrimary }]}>Unlock multiple spots</Text>
+              </View>
               <Text style={[styles.upgradeBannerSub, { color: textDim }]}>Premium lets you save home, dark sites, and travel spots — switch between them instantly.</Text>
             </View>
             <Text style={[styles.upgradeBannerCta, { color: nvAccent }]}>Upgrade</Text>
@@ -537,6 +541,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   upgradeBannerMain: { flex: 1, gap: 3 },
+  upgradeBannerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   upgradeBannerTitle: {
     fontFamily: 'SpaceGrotesk_600SemiBold',
     fontSize: 15,
