@@ -33,7 +33,7 @@ export default function PrivacyPolicyScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        <Text style={styles.updated}>Last updated: July 15, 2026</Text>
+        <Text style={styles.updated}>Last updated: October 23, 2026</Text>
 
         <Section title="Overview">
           ClearNight ("we", "our", or "us") is committed to protecting your privacy. This policy explains what information we collect, how we use it, and your choices regarding your data.
@@ -48,7 +48,11 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="Data Sharing">
-          We do not sell, trade, or rent your personal information to third parties. We may share anonymized, aggregated data with analytics providers to help us understand how the app is used.
+          We do not sell, trade, or rent your personal information to third parties. On the free tier, we show ads through Google AdMob. We also share anonymized, aggregated usage data with PostHog, our analytics provider, to help us understand how the app is used.
+        </Section>
+
+        <Section title="Advertising">
+          {"If you're on the free tier, ClearNight shows ads served by Google AdMob. These ads are non-personalized — we don't use your activity in other apps or websites to target them.\n\nAdMob may still collect device and advertising identifiers, general device information, and approximate location to serve ads, measure performance, and prevent fraud, as described in Google's Privacy Policy (policies.google.com/privacy). We also share impression-level ad revenue data with RevenueCat, our subscription platform, so ad and subscription income can be tracked together — this is performance data about ad delivery, not additional information about you.\n\nPremium subscribers never see ads."}
         </Section>
 
         <Section title="Push Notifications">
