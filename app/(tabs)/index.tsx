@@ -229,7 +229,7 @@ function TopSection(p: TopSectionProps) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { nightVision } = useNightVision();
-  const { status, hasActivePurchase } = useSubscription();
+  const { status, hasActivePurchase, trialDaysLeft } = useSubscription();
   const { plan } = usePlan();
   const { locations, activeLocIndex, hydrated, refreshingNames, fetchErrorNames, clearFetchError, refreshAll } = useLocations();
   const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -429,7 +429,9 @@ export default function HomeScreen() {
             <View style={[styles.trialDot, { backgroundColor: verdict.accent }]} />
             <Text style={[styles.trialText, { color: nvTextDim }]}>
               <Text style={[styles.trialBold, { color: nvTextPrimary }]}>Premium trial</Text>
-              {' · 5 days left — full forecast, alerts & more'}
+              {trialDaysLeft != null
+                ? ` · ${trialDaysLeft} day${trialDaysLeft === 1 ? '' : 's'} left — full forecast, alerts & more`
+                : ' · full forecast, alerts & more'}
             </Text>
             <TouchableOpacity style={[styles.trialBtn, { backgroundColor: verdict.accent }]} activeOpacity={0.8} onPress={() => router.push('/paywall')}>
               <Text style={[styles.trialBtnText, { color: '#04130f' }]}>Upgrade</Text>

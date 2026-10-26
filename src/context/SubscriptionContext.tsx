@@ -6,6 +6,11 @@ import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'clearnight:subscriptionStatus';
+const INSTALL_KEY = 'clearnight:installedAt';
+// Length of the free-tier "soft trial" shown before any purchase exists —
+// counted from first app launch (install), not from when onboarding
+// finishes, so it can't be reset by re-running onboarding.
+const TRIAL_LENGTH_DAYS = 7;
 const REVENUECAT_API_KEY_IOS = 'appl_LrnaPpbHDGInzsJXNtDMKDnBbRL';
 export const PREMIUM_ENTITLEMENT_ID = 'ClearNight Premium';
 
@@ -22,8 +27,9 @@ interface SubscriptionCtx {
   // trial" shown before any purchase exists. Both can produce status
   // 'trial', but only one of them should still see an upgrade prompt.
   hasActivePurchase: boolean;
-  // Whole days left in an active RevenueCat trial entitlement, or null when
-  // not in a real trial (free, subscribed, or the local "soft trial").
+  // Whole days left in the active trial — a real RevenueCat trial if one
+  // exists, otherwise the local soft trial countdown from install. Null
+  // when not currently on any trial (free or subscribed).
   trialDaysLeft: number | null;
   // Dev-only QA override — forces `status`/`hasActivePurchase` to a chosen
   // value regardless of the real RevenueCat entitlement, so premium states
@@ -64,6 +70,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const [localStatus, setLocalStatus] = useState<SubscriptionStatus>('trial');
   const [purchaseInfo, setPurchaseInfo] = useState<PurchaseInfo | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  // When the free-tier soft trial actually started (epoch ms) — recorded on
+  // first-ever launch, independent of onboarding or `localStatus`, so it
+  // can't be reset by re-onboarding. Null until hydration resolves it.
+  const [installedAt, setInstalledAt] = useState<number | null>(null);
   // Distinct from `purchaseInfo` being null, which is also the initial
   // state before RevenueCat has answered at all — this only flips once a
   // real entitlement check has actually resolved, so the Supabase sync
@@ -78,6 +88,19 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         if (saved === 'free' || saved === 'trial' || saved === 'subscribed') {
           setLocalStatus(saved);
         }
+        const savedInstall = await AsyncStorage.getItem(INSTALL_KEY);
+        if (savedInstall) {
+          setInstalledAt(Number(savedInstall));
+        } else {
+          // First time we've ever seen this key — either a genuinely fresh
+          // install, or an existing install from before this field existed.
+          // Either way, start the clock now rather than guessing a past
+          // date; an existing trial user just gets a fresh full-length
+          // trial from this point, which is the safe direction to be wrong.
+          const now = Date.now();
+          setInstalledAt(now);
+          AsyncStorage.setItem(INSTALL_KEY, String(now)).catch(() => {});
+        }
       } catch {
         // Corrupt/unavailable storage — start fresh.
       } finally {
@@ -90,6 +113,19 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     if (!hydrated) return;
     AsyncStorage.setItem(STORAGE_KEY, localStatus).catch(() => {});
   }, [localStatus, hydrated]);
+
+  // Expires the local soft trial once TRIAL_LENGTH_DAYS have actually
+  // passed since install. Runs on every mount (app open) rather than a live
+  // timer — the trial only needs to expire the next time the app is
+  // opened, same as how every other app's trial actually behaves. Never
+  // touches `localStatus` once a real RevenueCat purchase exists.
+  useEffect(() => {
+    if (!hydrated || installedAt == null) return;
+    if (localStatus !== 'trial') return;
+    if (purchaseInfo !== null) return;
+    const daysLeft = Math.max(0, TRIAL_LENGTH_DAYS - Math.floor((Date.now() - installedAt) / 86400000));
+    if (daysLeft <= 0) setLocalStatus('free');
+  }, [hydrated, installedAt, localStatus, purchaseInfo]);
 
   const { user } = useAuth();
 
@@ -165,11 +201,19 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const hasActivePurchase = previewing ? devPreview === 'subscribed' : purchaseInfo !== null;
   const setStatus = (next: SubscriptionStatus) => setLocalStatus(next);
 
+  // Days left in the local soft trial (not a real RevenueCat trial) — null
+  // until install time is known, then counts down from TRIAL_LENGTH_DAYS.
+  const localTrialDaysLeft = installedAt == null
+    ? null
+    : Math.max(0, TRIAL_LENGTH_DAYS - Math.floor((Date.now() - installedAt) / 86400000));
+
   const trialDaysLeft = previewing
-    ? (devPreview === 'trial' ? 5 : null)
-    : (purchaseInfo?.status === 'trial' && purchaseInfo.expirationDate
-        ? Math.max(0, Math.ceil((new Date(purchaseInfo.expirationDate).getTime() - Date.now()) / 86400000))
-        : null);
+    ? (devPreview === 'trial' ? TRIAL_LENGTH_DAYS : null)
+    : purchaseInfo?.status === 'trial' && purchaseInfo.expirationDate
+      ? Math.max(0, Math.ceil((new Date(purchaseInfo.expirationDate).getTime() - Date.now()) / 86400000))
+      : purchaseInfo === null && localStatus === 'trial'
+        ? localTrialDaysLeft
+        : null;
 
   return (
     <SubscriptionContext.Provider value={{ status, setStatus, hasActivePurchase, trialDaysLeft, devPreview, setDevPreview }}>
