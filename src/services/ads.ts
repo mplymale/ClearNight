@@ -1,4 +1,8 @@
-import mobileAds, { MaxAdContentRating } from 'react-native-google-mobile-ads';
+import mobileAds, {
+  AdsConsent,
+  AdsConsentPrivacyOptionsRequirementStatus,
+  MaxAdContentRating,
+} from 'react-native-google-mobile-ads';
 
 let initialized = false;
 
@@ -15,6 +19,15 @@ export async function initializeAds(): Promise<void> {
   if (initialized) return;
   initialized = true;
   try {
+    // GDPR/UK consent (CMP), required before any ad request. gatherConsent()
+    // checks the device's own region and only shows a form when the user is
+    // somewhere that requires one (EEA/UK) — everyone else resolves
+    // immediately with no UI. This doesn't change what we show (ads stay
+    // non-personalized regardless — set per-request, see
+    // clearnight-next-release-plan.md Release A #2); it's the required gate
+    // for showing ads to EEA/UK users at all.
+    await AdsConsent.gatherConsent();
+
     await mobileAds().setRequestConfiguration({
       maxAdContentRating: MaxAdContentRating.PG,
       tagForChildDirectedTreatment: false,
@@ -26,5 +39,29 @@ export async function initializeAds(): Promise<void> {
     // Ad requests made before a later successful initialize() will just fail
     // quietly (no-fill/error), same as any other ad network hiccup.
     initialized = false;
+  }
+}
+
+// Whether Settings should show a "Privacy options" row. Google requires a
+// way for EEA/UK users to revisit their ad-consent choice after the first
+// time; everyone else never needed one, so this stays false for them.
+export async function isAdsPrivacyOptionsRequired(): Promise<boolean> {
+  try {
+    const info = await AdsConsent.getConsentInfo();
+    return (
+      info.privacyOptionsRequirementStatus ===
+      AdsConsentPrivacyOptionsRequirementStatus.REQUIRED
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function showAdsPrivacyOptionsForm(): Promise<void> {
+  try {
+    await AdsConsent.showPrivacyOptionsForm();
+  } catch {
+    // Nothing to show, or the SDK isn't ready yet — fail silently rather
+    // than surface an error for a settings row the user tapped voluntarily.
   }
 }

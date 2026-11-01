@@ -27,6 +27,7 @@ import { useSubscription } from '../src/context/SubscriptionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { supabase } from '../src/lib/supabase';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
+import { isAdsPrivacyOptionsRequired, showAdsPrivacyOptionsForm } from '../src/services/ads';
 
 type Tier = 'free' | 'trial' | 'premium';
 
@@ -516,6 +517,7 @@ export default function SettingsScreen() {
   const [thresh, setThresh] = useState(78);
   const [quietPickerVisible, setQuietPickerVisible] = useState(false);
   const [detailsKey, setDetailsKey] = useState<string | null>(null);
+  const [showAdsPrivacyRow, setShowAdsPrivacyRow] = useState(false);
   const { nightVision, setNightVision } = useNightVision();
   const { use24h, setUse24h, useCelsius, setUseCelsius, useKnots, setUseKnots, quietStart, quietEnd, setQuietStart, setQuietEnd, pushEnabled, setPushEnabled } = usePreferences();
   const { alerts, toggleAlert, clearAlert, clearAllAlerts } = useAlerts();
@@ -523,6 +525,10 @@ export default function SettingsScreen() {
   const { status, trialDaysLeft, setStatus, setDevPreview } = useSubscription();
 
   const tier: Tier = status === 'subscribed' ? 'premium' : status;
+
+  useEffect(() => {
+    isAdsPrivacyOptionsRequired().then(setShowAdsPrivacyRow);
+  }, []);
   const isPremium = tier === 'premium';
   const unlocked = tier !== 'free';
 
@@ -806,6 +812,15 @@ export default function SettingsScreen() {
               divider={rowDivider}
               nameColor={textPrimary}
             />
+            {showAdsPrivacyRow && (
+              <Row
+                name="Ads Privacy Options"
+                right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}
+                onPress={() => { showAdsPrivacyOptionsForm(); }}
+                divider={rowDivider}
+                nameColor={textPrimary}
+              />
+            )}
             <Row
               name="Terms of Use"
               right={<Text style={[styles.rowChev, { color: textDim }]}>›</Text>}

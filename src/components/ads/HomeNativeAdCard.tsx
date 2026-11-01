@@ -7,8 +7,8 @@ import {
   NativeAsset,
   NativeAssetType,
   NativeMediaView,
-  TestIds,
 } from 'react-native-google-mobile-ads';
+import { NATIVE_AD_UNIT_ID } from '../../services/adUnits';
 import { AdFormat, trackAdRevenue } from '../../services/adRevenueTracker';
 import {
   useNightVision,
@@ -19,10 +19,10 @@ import {
   NV_TEXT_DIM,
 } from '../../context/NightVisionContext';
 
-// Real AdMob account live as of Oct 22 (Release A #2). Test IDs still used
-// in dev builds so nobody's own testing counts as real impressions against
-// the real account.
-const AD_UNIT_ID = __DEV__ ? TestIds.NATIVE : 'ca-app-pub-8886357120051718/2830301096';
+// Real AdMob account live as of Oct 22 (Release A #2). See adUnits.ts for
+// why this isn't gated on __DEV__ — that let real live ads reach TestFlight
+// testers, since TestFlight builds aren't "dev" builds.
+const AD_UNIT_ID = NATIVE_AD_UNIT_ID;
 
 // Free-tier-only native ad card for the home screen target list. Deliberately
 // built to the same shape as the real target cards it sits beside

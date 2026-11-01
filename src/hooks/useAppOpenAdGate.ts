@@ -1,14 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { useAppOpenAd, TestIds } from 'react-native-google-mobile-ads';
+import { useAppOpenAd } from 'react-native-google-mobile-ads';
+import { APP_OPEN_AD_UNIT_ID } from '../services/adUnits';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useNightVision } from '../context/NightVisionContext';
 import { AdFormat, trackAdRevenue } from '../services/adRevenueTracker';
 
-// Real AdMob account live as of Oct 22 (Release A #2). Test IDs still used
-// in dev builds so nobody's own testing counts as real impressions against
-// the real account.
-const AD_UNIT_ID = __DEV__ ? TestIds.APP_OPEN : 'ca-app-pub-8886357120051718/5299631897';
+// Real AdMob account live as of Oct 22 (Release A #2). See adUnits.ts for
+// why this isn't gated on __DEV__ — that let real live ads reach TestFlight
+// testers, since TestFlight builds aren't "dev" builds.
+const AD_UNIT_ID = APP_OPEN_AD_UNIT_ID;
 
 // How long the app has to have been backgrounded before a return visit is
 // eligible to show the ad. This — not launch count — is the gate: Mike was
