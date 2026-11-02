@@ -26,6 +26,12 @@ const MIN_AWAY_MS = __DEV__ ? 10 * 1000 : 5 * 60 * 1000;
 // that so a stale ad is never what's sitting there when the gate opens.
 const MAX_AD_AGE_MS = 3.5 * 60 * 60 * 1000;
 
+// How long to keep waiting for a load that was in flight at foreground time
+// to finish before giving up on showing it for that return visit. Long
+// enough to cover a normal load (a couple seconds, typically), short enough
+// that the ad never surprises the user well after they've moved on.
+const PENDING_SHOW_WINDOW_MS = 20 * 1000;
+
 const BACKGROUNDED = /inactive|background/;
 
 // Hoisted to a stable module-level reference on purpose. Passing a fresh
@@ -72,6 +78,15 @@ export function useAppOpenAdGate() {
   // Guards against double-reporting the same PaidEvent object to RevenueCat
   // if this effect re-runs for an unrelated reason.
   const lastReportedRevenueRef = useRef<typeof revenue>(null);
+  // Set when a foreground transition was otherwise eligible to show the ad
+  // but the ad wasn't loaded yet at that exact instant — the common case,
+  // since iOS freezes in-flight loads while the app is backgrounded, so a
+  // load kicked off right before backgrounding only actually resumes once
+  // the app is active again. Rather than losing that return visit entirely,
+  // the effect below watches for the load to finish shortly after and shows
+  // it then. Bounded by a deadline so a late/slow load can't pop an ad
+  // while the user's already well into doing something else.
+  const pendingShowDeadlineRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (adStatus === 'loaded') loadedAtRef.current = Date.now();
@@ -104,9 +119,13 @@ export function useAppOpenAdGate() {
         const stale = loadedAtRef.current !== null && Date.now() - loadedAtRef.current > MAX_AD_AGE_MS;
         try {
           if (adStatus !== 'loaded' || stale) {
-            // Not ready (or gone stale) right when we wanted it — refresh
-            // for next time rather than showing nothing or an expired ad.
+            // Not ready (or gone stale) right when we wanted it — most often
+            // because a load kicked off just before backgrounding never got
+            // to finish, since iOS freezes it until the app is active again.
+            // Kick off (or re-kick-off) the load, and give it a short window
+            // to land — the effect below picks it up if it does.
             load();
+            pendingShowDeadlineRef.current = Date.now() + PENDING_SHOW_WINDOW_MS;
             return;
           }
 
@@ -123,6 +142,34 @@ export function useAppOpenAdGate() {
 
     return () => sub.remove();
   }, [isFree, nightVision, adStatus, load, show]);
+
+  // Catches up a load that was still in flight at the exact foreground
+  // instant above. Runs whenever adStatus changes; only does anything if a
+  // pending window is actually open.
+  useEffect(() => {
+    const deadline = pendingShowDeadlineRef.current;
+    if (!deadline) return;
+
+    if (Date.now() > deadline) {
+      pendingShowDeadlineRef.current = null;
+      return;
+    }
+
+    if (adStatus === 'loaded') {
+      pendingShowDeadlineRef.current = null;
+      if (shownThisSessionRef.current || nightVision) return;
+      try {
+        shownThisSessionRef.current = true;
+        impressionIdRef.current = `app_open-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        show();
+      } catch {
+        // Same reasoning as above — never worth taking the app down over.
+      }
+    } else if (adStatus === 'no-fill' || adStatus === 'error') {
+      // That load isn't coming — stop waiting on it.
+      pendingShowDeadlineRef.current = null;
+    }
+  }, [adStatus, nightVision, show]);
 
   // AdMob reports revenue slightly after the impression itself — this
   // fires independently of the gate logic above, whenever a new PaidEvent
