@@ -93,6 +93,20 @@ export function useAppOpenAdGate() {
     if (adStatus === 'idle') loadedAtRef.current = null;
   }, [adStatus]);
 
+  // The "once per session" cap is keyed off this — NOT off calling show(),
+  // which can silently decline (see useFullScreenAd.ts: `MobileAd.show()`
+  // throws synchronously when not showable, and its promise can reject, but
+  // the hook's own `show()` wrapper swallows both — "ad events stay the
+  // failure channel, so nothing here writes hook state"). Setting the cap
+  // optimistically before confirming the ad actually opened was the real
+  // bug: one silently-declined show() permanently blocked every later
+  // attempt for the rest of the app session, with nothing to retry it.
+  // `'showing'` only ever gets set by a real AdEventType.OPENED event from
+  // the native side, so this only latches once a show has actually happened.
+  useEffect(() => {
+    if (adStatus === 'showing') shownThisSessionRef.current = true;
+  }, [adStatus]);
+
   useEffect(() => {
     if (!isFree) return;
 
@@ -129,13 +143,23 @@ export function useAppOpenAdGate() {
             return;
           }
 
-          shownThisSessionRef.current = true;
           impressionIdRef.current = `app_open-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-          show();
+          // A short defer before presenting — calling show() synchronously
+          // inside the AppState 'active' handler can land before the app's
+          // own window is actually frontmost/key again, which the native
+          // side can decline silently (see the note on shownThisSessionRef
+          // above for why "silently" is the operative word here).
+          setTimeout(() => {
+            try {
+              show();
+            } catch {
+              // An ad-SDK hiccup here should never be able to take down the
+              // whole app over something as non-essential as an interstitial
+              // — worst case, no ad shows this session.
+            }
+          }, 300);
         } catch {
-          // An ad-SDK hiccup here should never be able to take down the
-          // whole app over something as non-essential as an interstitial —
-          // worst case, no ad shows this session.
+          // Same reasoning as above.
         }
       }
     });
@@ -158,13 +182,14 @@ export function useAppOpenAdGate() {
     if (adStatus === 'loaded') {
       pendingShowDeadlineRef.current = null;
       if (shownThisSessionRef.current || nightVision) return;
-      try {
-        shownThisSessionRef.current = true;
-        impressionIdRef.current = `app_open-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        show();
-      } catch {
-        // Same reasoning as above — never worth taking the app down over.
-      }
+      impressionIdRef.current = `app_open-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setTimeout(() => {
+        try {
+          show();
+        } catch {
+          // Never worth taking the app down over.
+        }
+      }, 300);
     } else if (adStatus === 'no-fill' || adStatus === 'error') {
       // That load isn't coming — stop waiting on it.
       pendingShowDeadlineRef.current = null;
