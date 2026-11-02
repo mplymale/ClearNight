@@ -835,6 +835,20 @@ export default function SettingsScreen() {
               divider={rowDivider}
               nameColor="rgba(255,80,80,0.9)"
             />
+            {/* TEMPORARY TESTING SCAFFOLDING — not gated by __DEV__ on
+                purpose, so it actually works in a TestFlight build. Lets
+                Mike jump straight to free tier to test free-tier-only
+                behavior (ads, upgrade prompts) without waiting out the real
+                7-day trial. MUST come out before this build is ever
+                attached to a version submitted for real App Store review —
+                it's a trivial way for anyone to skip the trial entirely. */}
+            <Row
+              name="⚠️ TESTING: Skip to Free Tier"
+              sub="Remove before App Store submission"
+              onPress={() => setStatus('free')}
+              divider={rowDivider}
+              nameColor="rgba(255,160,60,0.95)" subColor={textDim}
+            />
             {__DEV__ && (
               <Row
                 name="Reset onboarding"

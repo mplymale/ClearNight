@@ -9,7 +9,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#04060e",
     "ios": {
-      "buildNumber": "30",
+      "buildNumber": "31",
       "bundleIdentifier": "com.clearnight.app",
       "supportsTablet": false,
       "requireFullScreen": true,
