@@ -17,7 +17,7 @@ import { TestIds } from 'react-native-google-mobile-ads';
 // ONLY on the specific build you're about to submit for App Store review,
 // and flip it back to `true` right after you upload that build, before the
 // next TestFlight round goes out.
-export const USE_TEST_ADS = true;
+export const USE_TEST_ADS = false;
 
 export const NATIVE_AD_UNIT_ID = USE_TEST_ADS
   ? TestIds.NATIVE
