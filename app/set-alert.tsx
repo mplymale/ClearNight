@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThreshPreset } from '../src/components/common/ThreshPreset';
 import { useLocations } from '../src/context/LocationsContext';
 import { useAlerts, AlertPreference } from '../src/context/AlertsContext';
+import { useAuth } from '../src/context/AuthContext';
+import { track } from '../src/services/analytics';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 
 const NIGHTS_OPTIONS: { key: AlertPreference['nightsMode']; label: string }[] = [
@@ -36,6 +38,7 @@ export default function SetAlertScreen() {
   const textDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.65)';
   const textFaint = nightVision ? NV_TEXT_FAINT : 'rgba(255,255,255,0.4)';
   const { saveAlertPreference, getAlert } = useAlerts();
+  const { user } = useAuth();
 
   const loc = locations[Number(locIndex) ?? 0];
   const isLocation = type === 'location';
@@ -72,6 +75,17 @@ export default function SetAlertScreen() {
       timing,
     };
     saveAlertPreference(alertKey, alertLabel, isLocation ? 'location' : 'target', preference);
+    // After the save, so the early return above means only real writes count.
+    // `isUpdate` splits a fresh alert from someone retuning an existing one.
+    track('alert_set', user?.id ?? null, {
+      alertType: isLocation ? 'location' : 'target',
+      targetKind: type,
+      threshold,
+      nightsMode,
+      pickedDayCount: nightsMode === 'pick' ? pickedDays.size : 0,
+      timing,
+      isUpdate: existing != null,
+    });
     router.back();
   }
 

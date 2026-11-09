@@ -18,6 +18,8 @@ import { useLocations } from '../src/context/LocationsContext';
 import { useAlerts } from '../src/context/AlertsContext';
 import { useFavorites } from '../src/context/FavoritesContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
+import { useAuth } from '../src/context/AuthContext';
+import { track } from '../src/services/analytics';
 import { usePreferences, applyTimeFormat } from '../src/context/PreferencesContext';
 import { computeObjectWindow } from '../src/services/skyObjects';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
@@ -222,6 +224,7 @@ export default function ObjectDetailScreen() {
   const { locations } = useLocations();
   const { hasAlert, getAlert } = useAlerts();
   const { toggleFavorite, isFavorite } = useFavorites();
+  const { user } = useAuth();
 
   const loc = locations[Number(locIndex) ?? 0];
   const isPrime = type === 'prime';
@@ -245,6 +248,26 @@ export default function ObjectDetailScreen() {
   const alertSet = hasAlert(alertKey);
   const alertRecord = getAlert(alertKey);
   const alertCount = alertRecord?.fires.length ?? 0;
+
+  // `target_added` fires on the add branch only. Removing something from the
+  // plan is not an activation signal; it is noise in the same funnel.
+  function handleTogglePlan() {
+    if (planned) {
+      removeFromPlan(planKey);
+      return;
+    }
+    addToPlan(planKey);
+    track('target_added', user?.id ?? null, {
+      planKey,
+      objectName: obj.name,
+      targetType: type,
+      locName: loc.name,
+      verdict: dayVerdict,
+      favorited,
+      alertSet,
+      tier: status,
+    });
+  }
 
   // Build detail fields from either prime or sky object
   const name = obj.name;
@@ -364,7 +387,7 @@ export default function ObjectDetailScreen() {
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }, nightVision && { backgroundColor: 'rgba(20,2,0,0.94)', borderTopColor: NV_BORDER }]}>
         <TouchableOpacity
           style={[styles.planBtn, planned && { borderColor: accent, backgroundColor: accent + '18' }]}
-          onPress={() => planned ? removeFromPlan(planKey) : addToPlan(planKey)}
+          onPress={handleTogglePlan}
           activeOpacity={0.8}
         >
           <Text style={[styles.planBtnText, { color: planned ? accent : textPrimary }]}>

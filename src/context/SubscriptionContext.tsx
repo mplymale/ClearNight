@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
+import { track } from '../services/analytics';
 
 const STORAGE_KEY = 'clearnight:subscriptionStatus';
 const INSTALL_KEY = 'clearnight:installedAt';
@@ -80,6 +81,10 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   // effect below never writes a premature "not premium" before we genuinely
   // know that.
   const [entitlementKnown, setEntitlementKnown] = useState(false);
+
+  // Whether premium was active the last time the sync effect below ran.
+  // Starts null, meaning "no resolved answer yet this launch".
+  const prevActiveRef = useRef<boolean | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -176,6 +181,34 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (Platform.OS !== 'ios') return;
     if (!user?.id || !entitlementKnown) return;
+
+    // `premium_activated` — fired on the free → premium transition only.
+    //
+    // This lives here rather than in the purchase handler because this is
+    // where the entitlement itself is known. It therefore also catches
+    // purchases RevenueCat learns about out of band: restores, offer-code
+    // redemptions, and a renewal that lands while the app is closed.
+    //
+    // The ref is mandatory, not tidiness. `entitlementInfo()` returns a
+    // fresh object on every CustomerInfo refresh, so `purchaseInfo` changes
+    // identity even when its contents are identical, and this effect
+    // re-runs. Comparing objects, or trusting the deps, double-fires.
+    //
+    // A null previous value records without firing: an already-subscribed
+    // diver opening the app is not a purchase.
+    const active = purchaseInfo !== null;
+    const wasActive = prevActiveRef.current;
+    prevActiveRef.current = active;
+    if (wasActive === false && active && purchaseInfo) {
+      // `localStatus` is deliberately read from this effect's closure and
+      // is not a dependency: the value captured before the transition is
+      // precisely the "prior" status we want to record.
+      track('premium_activated', user.id, {
+        tier: purchaseInfo.status,
+        expirationDate: purchaseInfo.expirationDate,
+        priorLocalStatus: localStatus,
+      });
+    }
 
     (async () => {
       try {

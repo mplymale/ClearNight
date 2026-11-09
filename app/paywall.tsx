@@ -205,7 +205,11 @@ export default function PaywallScreen() {
       await Purchases.purchasePackage(pkg);
       setDevPreview(null); // a real purchase should always show real status, even mid-preview
       setDone(true);
-      track('paywall_purchase_succeeded', user?.id ?? null, { plan });
+      // No success event here on purpose. `premium_activated` fires from
+      // SubscriptionContext when the entitlement actually resolves, which
+      // also catches restores, offer codes and renewals that land while the
+      // app is closed. A second event here would undercount and disagree.
+      // The failure case below has no entitlement equivalent, so it stays.
     } catch (e: any) {
       if (!e?.userCancelled) {
         Alert.alert('Purchase failed', 'Something went wrong. Please try again.');

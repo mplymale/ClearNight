@@ -31,6 +31,8 @@ import { SkyBackground } from '../../src/components/home/SkyBackground';
 import { StarField } from '../../src/components/home/StarField';
 import { useSubscription, SubscriptionStatus } from '../../src/context/SubscriptionContext';
 import { useAlerts } from '../../src/context/AlertsContext';
+import { useAuth } from '../../src/context/AuthContext';
+import { track } from '../../src/services/analytics';
 
 // ── Shared icons ─────────────────────────────────────────────────────────────
 
@@ -254,6 +256,7 @@ export default function HomeScreen() {
   // it keeps running even when this screen is backgrounded (and frozen) by
   // another screen, e.g. the Settings alerts list sitting on top.
   const { hasAlert } = useAlerts();
+  const { user } = useAuth();
   const isFree = status === 'free';
   const nvTextPrimary = nightVision ? NV_TEXT : '#fff';
   const nvTextDim = nightVision ? NV_TEXT_DIM : 'rgba(255,255,255,0.72)';
@@ -262,6 +265,34 @@ export default function HomeScreen() {
   const loc = locations.length > 0 ? (isFree ? locations[0] : locations[safeLocIndex]) : null;
   const day = loc ? (isFree ? loc.days[0] : loc.days[dayIndex]) : null;
   const verdict = day ? VERDICTS[day.verdict] : VERDICTS.poor;
+
+  // `forecast_viewed` — one event per distinct forecast the user looks at.
+  //
+  // Keyed on which location and which day are showing, not on the score:
+  // a data refresh that changes the number is not the user looking at
+  // something new, but swiping to another spot or tapping another day is.
+  // So this fires several times per visit and that is the intent —
+  // `$pageview` already counts the visits; this records what was seen.
+  //
+  // Must sit above the early returns below; a hook after them would break
+  // hook ordering. Guards internally instead.
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = user?.id ?? null;
+  useEffect(() => {
+    if (!loc || !day) return;
+    track('forecast_viewed', userIdRef.current, {
+      score: day.score,
+      verdict: day.verdict,
+      locName: loc.name,
+      bortle: day.bortle,
+      cloud: day.cloud,
+      moon: day.moon,
+      dayIndex,
+      isFree,
+      planCount: plan.size,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire on what is shown, not on data refresh
+  }, [loc?.name, dayIndex]);
 
   // Use refs so PanResponder callbacks always see current values
   const locIndexRef = useRef(locIndex);

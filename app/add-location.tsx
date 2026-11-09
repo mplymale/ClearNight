@@ -16,6 +16,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocations } from '../src/context/LocationsContext';
 import { useFavorites } from '../src/context/FavoritesContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
+import { useAuth } from '../src/context/AuthContext';
+import { track } from '../src/services/analytics';
 import { useNightVision, NV_ACCENT, NV_BORDER, NV_CARD, NV_TEXT, NV_TEXT_DIM, NV_TEXT_FAINT } from '../src/context/NightVisionContext';
 import { CheckIcon } from '../src/components/common/CheckIcon';
 import { StarIcon } from '../src/components/common/StarIcon';
@@ -80,7 +82,20 @@ export default function AddLocationScreen() {
   const { addLocation, removeLocation, locations, activeLocIndex } = useLocations();
   const { addFavorite, removeLocationFavorites } = useFavorites();
   const { status } = useSubscription();
+  const { user } = useAuth();
   const { nightVision } = useNightVision();
+
+  // `location_saved` — one event, three entry points. `source` is the whole
+  // reason this is instrumented per handler rather than in LocationsContext:
+  // GPS vs a curated dark-sky place vs free-text search are different
+  // behaviours, and the context has no way to know which one it was.
+  function recordSaved(source: 'gps' | 'dark_sky' | 'search', name: string, region: string, bortle: number, resultingCount: number) {
+    track('location_saved', user?.id ?? null, {
+      source, name, region, bortle,
+      tier: status,
+      locationCount: resultingCount,
+    });
+  }
   const nvAccent = nightVision ? NV_ACCENT : '#7ef0d2';
   const containerBg = nightVision ? '#150400' : '#080b12';
   const cardBg = nightVision ? NV_CARD : 'rgba(255,255,255,0.04)';
@@ -236,6 +251,7 @@ export default function AddLocationScreen() {
       const newIdx = isFree && hasLocation ? 0 : locations.length;
       addLocation(loc);
       addFavorite(`${newIdx}-prime-prime`);
+      recordSaved('gps', city, region, estimatedBortle, newIdx + 1);
       router.back();
     } catch (e) {
       Alert.alert('Error', 'Could not get your location. Please try again.');
@@ -255,6 +271,7 @@ export default function AddLocationScreen() {
     const newIdx = isFree && hasLocation ? 0 : locations.length;
     addLocation(loc);
     addFavorite(`${newIdx}-prime-prime`);
+    recordSaved('dark_sky', place.name, place.state, place.bortle, newIdx + 1);
     router.back();
   }
 
@@ -265,10 +282,12 @@ export default function AddLocationScreen() {
       return;
     }
     if (isFree && hasLocation) clearAllLocations();
-    const loc = mkLocFromPlace(r.city, r.region, estimateBortle(r.latitude, r.longitude), r.latitude, r.longitude);
+    const bortle = estimateBortle(r.latitude, r.longitude);
+    const loc = mkLocFromPlace(r.city, r.region, bortle, r.latitude, r.longitude);
     const newIdx = isFree && hasLocation ? 0 : locations.length;
     addLocation(loc);
     addFavorite(`${newIdx}-prime-prime`);
+    recordSaved('search', r.city, r.region, bortle, newIdx + 1);
     router.back();
   }
 

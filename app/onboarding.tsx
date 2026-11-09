@@ -20,6 +20,8 @@ import { StarField } from '../src/components/home/StarField';
 import { useLocations } from '../src/context/LocationsContext';
 import { useInterests } from '../src/context/InterestsContext';
 import { useSubscription } from '../src/context/SubscriptionContext';
+import { useAuth } from '../src/context/AuthContext';
+import { track } from '../src/services/analytics';
 import { mkLocFromPlace } from '../src/data/mockForecast';
 import { DARK_SKY_PLACES } from '../src/data/darkSkyPlaces';
 import { haversineMiles, formatMiles } from '../src/services/geo';
@@ -212,6 +214,16 @@ interface SearchResult {
 function StepLocation({ onNext }: { onNext: () => void }) {
   const insets = useSafeAreaInsets();
   const { addLocation } = useLocations();
+  const { user } = useAuth();
+
+  // First-run location counts as `location_saved` too, tagged
+  // `source: 'onboarding'` — without it the activation funnel has a hole at
+  // step one. This is a brand-new install so the resulting count is 1.
+  function recordSaved(name: string, region: string, bortle: number) {
+    track('location_saved', user?.id ?? null, {
+      source: 'onboarding', name, region, bortle, locationCount: 1,
+    });
+  }
   const [gpsLoading, setGpsLoading] = useState(false);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -328,6 +340,7 @@ function StepLocation({ onNext }: { onNext: () => void }) {
       const region = geo?.region ?? geo?.country ?? '';
       const bortle = estimateBortle(pos.coords.latitude, pos.coords.longitude);
       addLocation(mkLocFromPlace(city, region, bortle, pos.coords.latitude, pos.coords.longitude));
+      recordSaved(city, region, bortle);
       onNext();
     } catch {
       Alert.alert('Error', 'Could not get your location. Please try again.');
@@ -338,11 +351,14 @@ function StepLocation({ onNext }: { onNext: () => void }) {
 
   function handleSuggestion(s: typeof nearbySuggestions[0]) {
     addLocation(mkLocFromPlace(s.name, s.state, s.bortle, s.lat, s.lon));
+    recordSaved(s.name, s.state, s.bortle);
     onNext();
   }
 
   function handleSearchResult(r: SearchResult) {
-    addLocation(mkLocFromPlace(r.city, r.region, estimateBortle(r.latitude, r.longitude), r.latitude, r.longitude));
+    const bortle = estimateBortle(r.latitude, r.longitude);
+    addLocation(mkLocFromPlace(r.city, r.region, bortle, r.latitude, r.longitude));
+    recordSaved(r.city, r.region, bortle);
     onNext();
   }
 
