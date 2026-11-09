@@ -1,23 +1,30 @@
 import { TestIds } from 'react-native-google-mobile-ads';
 
 // ─────────────────────────────────────────────────────────────────────────
-// SHIP CHECK — the one flag to flip before a real App Store submission.
+// Which ad units this binary uses — decided by the build profile, not by
+// hand.
 //
-// TestFlight and the real App Store release are the exact same binary —
-// Apple just points either audience at whichever build you tell it to
-// release. There's no runtime signal the app can check to tell "I'm
-// running as a TestFlight build" from "I'm running as the released App
-// Store build" without native receipt-checking code this project doesn't
-// have. The old per-file `__DEV__ ? TestIds.X : liveId` pattern assumed
-// TestFlight would count as a "dev" build — it doesn't; __DEV__ is false
-// in every release/TestFlight build, which is why real live ads were being
-// served to TestFlight testers.
+// TestFlight and the App Store release are the same binary, and `__DEV__`
+// is false in both, so no runtime signal separates them. That is why this
+// used to be a hand-flipped constant: `true` through every TestFlight
+// round, `false` on the one build going to review, back to `true`
+// afterwards. Two chances to forget per release, and forgetting in the
+// TestFlight direction serves live ads to testers — an AdMob policy
+// violation.
 //
-// So: leave this `true` through every TestFlight build. Flip it to `false`
-// ONLY on the specific build you're about to submit for App Store review,
-// and flip it back to `true` right after you upload that build, before the
-// next TestFlight round goes out.
-export const USE_TEST_ADS = false;
+// The signal that does exist is the EAS build profile. `eas.json` sets
+// EXPO_PUBLIC_USE_TEST_ADS per profile and Expo inlines it into the bundle
+// at build time.
+//
+// Written as `!== 'false'` deliberately. Anything that is not an explicit
+// production build — a dev client, a preview build, a bare `expo run`, a
+// profile someone adds later and forgets to annotate — gets TEST ads. The
+// cost of forgetting is a build that earns nothing, never one that breaks
+// Google's policy.
+//
+// So: `eas build --profile production` is the only thing that produces
+// live ads. Nothing to remember before or after a TestFlight round.
+export const USE_TEST_ADS = process.env.EXPO_PUBLIC_USE_TEST_ADS !== 'false';
 
 export const NATIVE_AD_UNIT_ID = USE_TEST_ADS
   ? TestIds.NATIVE
