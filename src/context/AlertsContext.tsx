@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AlertNavData, cancelLocalAlert, ensureNotificationPermission, parseWindowEndDate, parseWindowStartDate, scheduleLocalAlert } from '../services/alertScheduling';
-import { registerPushToken } from '../services/pushTokens';
+import { reclaimPushTokenIfPermitted, registerPushToken } from '../services/pushTokens';
+import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { useLocations } from './LocationsContext';
 import { usePreferences } from './PreferencesContext';
@@ -121,6 +122,16 @@ export function AlertsProvider({ children }: { children: React.ReactNode }) {
   // second concurrent run sees the claim even though React state hasn't
   // re-rendered (and AsyncStorage hasn't been written) yet.
   const firedTodayRef = useRef<Record<string, string>>({});
+
+  // Reclaim this device's push token for the current user as soon as there
+  // is one, independent of whether any alert exists yet. See
+  // reclaimPushTokenIfPermitted for why: it is what stops a reinstalled
+  // phone receiving the previous install's alerts.
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user?.id) return;
+    reclaimPushTokenIfPermitted();
+  }, [user?.id]);
 
   useEffect(() => {
     (async () => {

@@ -5,6 +5,31 @@ import { supabase } from '../lib/supabase';
 
 const PROJECT_ID = '67acbb81-4fcf-43a8-a93b-b37833920d88';
 
+/**
+ * Re-register this device's token for the current user WITHOUT prompting.
+ *
+ * Why this exists: under anonymous auth every reinstall is a new user, but
+ * the device's Expo push token usually survives the reinstall. Until the
+ * new user claims it, the token still belongs to the old (dead) user — and
+ * if iOS kept notification permission across the reinstall, that old
+ * user's alerts keep pushing to this phone. Calling this at launch moves
+ * the token over immediately; the old user goes tokenless and the server
+ * skips them from the next run.
+ *
+ * Never shows the permission prompt. If permission was not already
+ * granted there is nothing to reclaim.
+ */
+export async function reclaimPushTokenIfPermitted(): Promise<void> {
+  if (!Device.isDevice) return;
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+    await registerPushToken();
+  } catch {
+    // Best effort; the alert-driven registration path still runs later.
+  }
+}
+
 export async function registerPushToken(): Promise<void> {
   if (!Device.isDevice) return;
 

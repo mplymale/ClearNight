@@ -1,6 +1,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
+
+// A tokenless alert can never be delivered. Users with no token are skipped
+// on every run anyway; this is about not re-reading them forever. 30 days is
+// long enough that a user who set an alert before granting notification
+// permission has had every chance to grant it.
+const TOKENLESS_ALERT_MAX_AGE_DAYS = 30;
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -40,6 +47,25 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 0. Resolve receipts from earlier runs. Apple reports an uninstalled
+    //    device as DeviceNotRegistered on the receipt, not the ticket, and
+    //    receipts take ~15 minutes to appear — so each run settles the
+    //    previous runs' sends. This is the mechanism that actually stops
+    //    pushes after an uninstall.
+    const receiptDead = await resolvePendingReceipts();
+    let prunedTokens = 0;
+    let prunedAlertUsers = 0;
+    if (receiptDead.size > 0) {
+      const pruned = await pruneDeadTokens(receiptDead);
+      prunedTokens += pruned.tokens;
+      prunedAlertUsers += pruned.alertUsers;
+    }
+
+    // 0b. Sweep alerts that belong to users with no push token and are older
+    //     than the grace period. One ghost accumulates per reinstall under
+    //     anonymous auth; without this they grow without bound.
+    const sweptAlerts = await sweepTokenlessAlerts();
+
     // 1. Load all enabled alerts
     const { data: alertRows, error: alertErr } = await supabase
       .from('alerts')
@@ -195,12 +221,18 @@ Deno.serve(async (req) => {
       });
       const json = await res.json();
       results.push(json);
-      const tickets: { status: string; details?: { error?: string } }[] = json?.data ?? [];
+      const tickets: { status: string; id?: string; details?: { error?: string } }[] = json?.data ?? [];
+      const pendingTickets: { ticket_id: string; token: string }[] = [];
       tickets.forEach((t, idx) => {
         if (t?.status === 'error' && t.details?.error === 'DeviceNotRegistered') {
           deadTokens.add(batch[idx].to);
+        } else if (t?.status === 'ok' && t.id) {
+          pendingTickets.push({ ticket_id: t.id, token: batch[idx].to });
         }
       });
+      if (pendingTickets.length > 0) {
+        await supabase.from('push_tickets').upsert(pendingTickets, { onConflict: 'ticket_id' });
+      }
     }
 
     // 5b. A token Expo reports as DeviceNotRegistered belongs to a phone that
@@ -208,24 +240,10 @@ Deno.serve(async (req) => {
     //     the token, and the alerts of any user left with no token at all —
     //     nothing can ever deliver them, and leaving them makes this run
     //     re-evaluate ghosts every hour forever.
-    let prunedTokens = 0;
-    let prunedAlertUsers = 0;
     if (deadTokens.size > 0) {
-      const dead = Array.from(deadTokens);
-      const affectedUsers = new Set(
-        (tokenRows ?? []).filter(r => deadTokens.has(r.token)).map(r => r.user_id),
-      );
-      const { error: delTokErr } = await supabase.from('push_tokens').delete().in('token', dead);
-      if (!delTokErr) prunedTokens = dead.length;
-
-      for (const uid of affectedUsers) {
-        const { count } = await supabase
-          .from('push_tokens').select('*', { count: 'exact', head: true }).eq('user_id', uid);
-        if ((count ?? 0) === 0) {
-          const { error: delAlertErr } = await supabase.from('alerts').delete().eq('user_id', uid);
-          if (!delAlertErr) prunedAlertUsers++;
-        }
-      }
+      const pruned = await pruneDeadTokens(deadTokens);
+      prunedTokens += pruned.tokens;
+      prunedAlertUsers += pruned.alertUsers;
     }
 
     // 6. Mark qualifying alerts as notified so this run's matches don't
@@ -239,7 +257,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ sent: messages.length, prunedTokens, prunedAlertUsers, results }),
+      JSON.stringify({ sent: messages.length, prunedTokens, prunedAlertUsers, sweptAlerts, results }),
       { headers: { 'Content-Type': 'application/json' } },
     );
   } catch (err) {
@@ -247,6 +265,86 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
   }
 });
+
+// Fetch receipts for tickets older than 15 minutes; return the tokens Expo
+// says are DeviceNotRegistered. Processed tickets are deleted either way.
+async function resolvePendingReceipts(): Promise<Set<string>> {
+  const dead = new Set<string>();
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { data: pending, error } = await supabase
+    .from('push_tickets')
+    .select('ticket_id, token')
+    .lt('created_at', cutoff)
+    .limit(1000);
+  if (error || !pending || pending.length === 0) return dead;
+
+  const byTicket = new Map(pending.map(p => [p.ticket_id, p.token]));
+  try {
+    const res = await fetch(EXPO_RECEIPTS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(byTicket.keys()) }),
+    });
+    const json = await res.json();
+    const receipts: Record<string, { status: string; details?: { error?: string } }> = json?.data ?? {};
+    for (const [id, r] of Object.entries(receipts)) {
+      if (r?.status === 'error' && r.details?.error === 'DeviceNotRegistered') {
+        const token = byTicket.get(id);
+        if (token) dead.add(token);
+      }
+    }
+  } catch (e) {
+    console.error('receipt check failed:', e);
+    return dead; // keep the tickets; try again next run
+  }
+
+  // Expo drops receipts after ~24h; anything we asked about is settled or gone.
+  await supabase.from('push_tickets').delete().in('ticket_id', Array.from(byTicket.keys()));
+  return dead;
+}
+
+// Delete the given tokens, then the alerts of any user left with no token.
+async function pruneDeadTokens(deadTokens: Set<string>): Promise<{ tokens: number; alertUsers: number }> {
+  const dead = Array.from(deadTokens);
+  const { data: owners } = await supabase.from('push_tokens').select('user_id').in('token', dead);
+  const affectedUsers = new Set((owners ?? []).map(o => o.user_id));
+
+  const { error: delTokErr } = await supabase.from('push_tokens').delete().in('token', dead);
+  let alertUsers = 0;
+  for (const uid of affectedUsers) {
+    const { count } = await supabase
+      .from('push_tokens').select('*', { count: 'exact', head: true }).eq('user_id', uid);
+    if ((count ?? 0) === 0) {
+      const { error: delAlertErr } = await supabase.from('alerts').delete().eq('user_id', uid);
+      if (!delAlertErr) alertUsers++;
+    }
+  }
+  return { tokens: delTokErr ? 0 : dead.length, alertUsers };
+}
+
+// Alerts whose user has no push token and that are past the grace period.
+async function sweepTokenlessAlerts(): Promise<number> {
+  const cutoff = new Date(Date.now() - TOKENLESS_ALERT_MAX_AGE_DAYS * 86400000).toISOString();
+  const { data: stale } = await supabase
+    .from('alerts')
+    .select('user_id')
+    .lt('created_at', cutoff);
+  if (!stale || stale.length === 0) return 0;
+  const candidates = Array.from(new Set(stale.map(s => s.user_id)));
+  const { data: withTokens } = await supabase
+    .from('push_tokens')
+    .select('user_id')
+    .in('user_id', candidates);
+  const keep = new Set((withTokens ?? []).map(t => t.user_id));
+  const doomed = candidates.filter(u => !keep.has(u));
+  if (doomed.length === 0) return 0;
+  const { error, count } = await supabase
+    .from('alerts')
+    .delete({ count: 'exact' })
+    .in('user_id', doomed)
+    .lt('created_at', cutoff);
+  return error ? 0 : (count ?? 0);
+}
 
 function isSameUtcDay(a: Date, b: Date): boolean {
   return a.getUTCFullYear() === b.getUTCFullYear()
