@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -184,10 +184,15 @@ export default function PaywallScreen() {
   // AnalyticsRouter already fires on every route — this one carries the
   // `returnTo` context (what sent someone here) so the conversion funnel is
   // actually attributable to a trigger point, not just "they hit /paywall".
+  // Not gated on, nor keyed to, `user?.id`: gating loses the view entirely
+  // on a cold start, and keying to it fires a second view when the session
+  // resolves. See src/services/analytics.ts.
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = user?.id ?? null;
+
   useEffect(() => {
-    if (!user?.id) return;
-    track('paywall_viewed', user.id, { returnTo: returnTo ?? null });
-  }, [user?.id, returnTo]);
+    track('paywall_viewed', userIdRef.current, { returnTo: returnTo ?? null });
+  }, [returnTo]);
 
   async function handlePurchase() {
     const pkg = packageForPlan(offering, plan);
@@ -200,11 +205,11 @@ export default function PaywallScreen() {
       await Purchases.purchasePackage(pkg);
       setDevPreview(null); // a real purchase should always show real status, even mid-preview
       setDone(true);
-      if (user?.id) track('paywall_purchase_succeeded', user.id, { plan });
+      track('paywall_purchase_succeeded', user?.id ?? null, { plan });
     } catch (e: any) {
       if (!e?.userCancelled) {
         Alert.alert('Purchase failed', 'Something went wrong. Please try again.');
-        if (user?.id) track('paywall_purchase_failed', user.id, { plan });
+        track('paywall_purchase_failed', user?.id ?? null, { plan });
       }
     } finally {
       setPurchasing(false);

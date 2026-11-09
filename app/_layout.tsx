@@ -9,7 +9,7 @@ import { useFonts } from 'expo-font';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { Component, useEffect, type ReactNode } from 'react';
+import { Component, useEffect, useRef, type ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
 import { NightVisionProvider } from '../src/context/NightVisionContext';
 import { PlanProvider } from '../src/context/PlanContext';
@@ -50,10 +50,17 @@ function AnalyticsRouter() {
   const pathname = usePathname();
   const { user } = useAuth();
 
+  // The id is read through a ref rather than listed as a dependency, on
+  // purpose: depending on it would re-fire the same pageview when the
+  // session resolves mid-screen. One pageview per route change, carrying
+  // whatever identity exists at that moment — anonymous on a cold start,
+  // real once signed in, and PostHog merges the two via $identify.
+  const userIdRef = useRef<string | null>(null);
+  userIdRef.current = user?.id ?? null;
+
   useEffect(() => {
-    if (!user?.id) return;
-    track('$pageview', user.id, { path: pathname, $current_url: pathname });
-  }, [pathname, user?.id]);
+    track('$pageview', userIdRef.current, { path: pathname, $current_url: pathname });
+  }, [pathname]);
 
   return null;
 }
