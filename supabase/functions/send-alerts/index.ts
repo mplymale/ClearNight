@@ -15,6 +15,10 @@ interface AlertData {
     threshold: number;
     timing: 'evening' | 'dayBefore';
   };
+  // The phone's own locally-scheduled notifications for this alert, synced
+  // up by AlertsContext. If one of these is still in the future, the phone
+  // will show it itself and this function must not send a second one.
+  fires?: { fireDateMs: number }[];
 }
 
 type PushData =
@@ -103,6 +107,13 @@ Deno.serve(async (req) => {
         // hour's cron run repeats while conditions stay good.
         if (alertRow.last_notified_at && isSameUtcDay(new Date(alertRow.last_notified_at), now)) continue;
 
+        // The phone has a local notification queued for this alert. It will
+        // fire on its own; a push on top of it is the "double alert" bug.
+        // Server push is the backstop for a phone that has not run the app
+        // recently enough to have scheduled anything — in that case the
+        // fires here are in the past or empty, and we fall through.
+        if ((alert.fires ?? []).some(f => f.fireDateMs > now.getTime())) continue;
+
         // Match alert key to location index — either a location alert or a
         // target alert (prime target / specific object) for that location.
         const locMatch = alertRow.key.match(/^alert-loc-(\d+)$/);
@@ -170,9 +181,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. Send all messages in batches of 100 (Expo limit)
+    // 5. Send all messages in batches of 100 (Expo limit). Tickets come back
+    //    in the same order as the batch, so index maps back to the token.
     const messages = Array.from(messagesByToken.values());
     const results = [];
+    const deadTokens = new Set<string>();
     for (let i = 0; i < messages.length; i += 100) {
       const batch = messages.slice(i, i + 100);
       const res = await fetch(EXPO_PUSH_URL, {
@@ -180,7 +193,39 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify(batch),
       });
-      results.push(await res.json());
+      const json = await res.json();
+      results.push(json);
+      const tickets: { status: string; details?: { error?: string } }[] = json?.data ?? [];
+      tickets.forEach((t, idx) => {
+        if (t?.status === 'error' && t.details?.error === 'DeviceNotRegistered') {
+          deadTokens.add(batch[idx].to);
+        }
+      });
+    }
+
+    // 5b. A token Expo reports as DeviceNotRegistered belongs to a phone that
+    //     uninstalled the app (or turned notifications off for good). Delete
+    //     the token, and the alerts of any user left with no token at all —
+    //     nothing can ever deliver them, and leaving them makes this run
+    //     re-evaluate ghosts every hour forever.
+    let prunedTokens = 0;
+    let prunedAlertUsers = 0;
+    if (deadTokens.size > 0) {
+      const dead = Array.from(deadTokens);
+      const affectedUsers = new Set(
+        (tokenRows ?? []).filter(r => deadTokens.has(r.token)).map(r => r.user_id),
+      );
+      const { error: delTokErr } = await supabase.from('push_tokens').delete().in('token', dead);
+      if (!delTokErr) prunedTokens = dead.length;
+
+      for (const uid of affectedUsers) {
+        const { count } = await supabase
+          .from('push_tokens').select('*', { count: 'exact', head: true }).eq('user_id', uid);
+        if ((count ?? 0) === 0) {
+          const { error: delAlertErr } = await supabase.from('alerts').delete().eq('user_id', uid);
+          if (!delAlertErr) prunedAlertUsers++;
+        }
+      }
     }
 
     // 6. Mark qualifying alerts as notified so this run's matches don't
@@ -194,7 +239,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ sent: messages.length, results }),
+      JSON.stringify({ sent: messages.length, prunedTokens, prunedAlertUsers, results }),
       { headers: { 'Content-Type': 'application/json' } },
     );
   } catch (err) {
